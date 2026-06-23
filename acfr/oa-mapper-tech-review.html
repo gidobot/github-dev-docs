@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>OA Mapper — Technical Review</title>
+<style>
+  :root {
+    --bg:        #0e1117;
+    --panel:     #161b27;
+    --border:    #2a3147;
+    --accent:    #4a9eff;
+    --accent2:   #7ecba1;
+    --accent3:   #f0a04b;
+    --danger:    #e05c5c;
+    --text:      #d0d6e8;
+    --muted:     #7a8299;
+    --code-bg:   #1a2035;
+    --tag-alt:   #1e3a2f;
+    --tag-obs:   #3a1e1e;
+    --tag-nav:   #1e2d3a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+    font-size: 15px;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* ── Layout ── */
+  .page { max-width: 1080px; margin: 0 auto; padding: 48px 24px 80px; }
+  section { margin-top: 56px; }
+  section + section { border-top: 1px solid var(--border); padding-top: 40px; }
+
+  /* ── Typography ── */
+  h1 { font-size: 2rem; font-weight: 700; color: #fff; letter-spacing: -.5px; }
+  h2 { font-size: 1.35rem; font-weight: 600; color: var(--accent); margin-bottom: 18px; }
+  h3 { font-size: 1.05rem; font-weight: 600; color: #c8d0e8; margin: 24px 0 10px; }
+  h4 { font-size: .9rem; font-weight: 600; color: var(--muted); margin: 16px 0 6px; text-transform: uppercase; letter-spacing: .5px; }
+  p { margin-bottom: 12px; color: #b8c0d6; }
+  ul, ol { padding-left: 22px; margin-bottom: 12px; color: #b8c0d6; }
+  li { margin-bottom: 4px; }
+  code {
+    font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+    font-size: .85em;
+    background: var(--code-bg);
+    color: #89d9ff;
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    font-family: 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+    font-size: .82em;
+    color: #c8e6f0;
+    margin: 12px 0;
+    line-height: 1.5;
+  }
+  pre .cmt { color: #5a7080; }
+  pre .kw  { color: #79c0ff; }
+  pre .str { color: #a5d6a7; }
+  pre .num { color: #f0a04b; }
+
+  /* ── Subtitle / meta ── */
+  .doc-meta {
+    margin: 12px 0 0;
+    color: var(--muted);
+    font-size: .88rem;
+  }
+  .doc-meta span { margin-right: 24px; }
+
+  /* ── Panel / card ── */
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+  }
+  .card-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .card-row .card { flex: 1 1 280px; margin-bottom: 0; }
+
+  /* ── Callout boxes ── */
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: #111a2c;
+    padding: 10px 16px;
+    border-radius: 0 6px 6px 0;
+    margin: 14px 0;
+    font-size: .9rem;
+    color: #9ab8d8;
+  }
+  .callout.warn { border-color: var(--accent3); background: #1c1810; color: #c8a85a; }
+
+  /* ── Tags / badges ── */
+  .tag {
+    display: inline-block;
+    font-size: .72rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 3px;
+    letter-spacing: .4px;
+    margin: 2px 3px 2px 0;
+    vertical-align: middle;
+  }
+  .tag-sub { background: #1e2d3a; color: #6ab4e0; }
+  .tag-pub { background: #1e3a2f; color: #7ecba1; }
+  .tag-cfg { background: #2d2318; color: #d4943a; }
+  .tag-mode { background: #2a1e3a; color: #b07eda; }
+
+  /* ── Tables ── */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: .88rem; }
+  th { text-align: left; padding: 8px 12px; border-bottom: 2px solid var(--border); color: var(--muted); font-weight: 600; text-transform: uppercase; font-size: .75rem; letter-spacing: .5px; }
+  td { padding: 7px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #1c2235; }
+
+  /* ── SVG diagrams ── */
+  .diagram {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+    overflow: auto;
+    margin: 16px 0;
+  }
+  .diagram svg { max-width: 100%; }
+
+  /* ── Button (video placeholders) ── */
+  .btn {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-size: .83rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn:hover { background: #6ab4ff; }
+  .btn:disabled { opacity: .5; cursor: default; }
+
+  /* ── State machine ── */
+  .state-machine { position: relative; }
+  .sm-state {
+    cursor: pointer;
+    transition: filter .15s;
+  }
+  .sm-state:hover rect { filter: brightness(1.3); }
+  .sm-detail {
+    background: #101828;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin-top: 10px;
+    font-size: .87rem;
+    color: #b0bcd4;
+    display: none;
+  }
+  .sm-detail.active { display: block; }
+  .sm-entry { color: #5a6a7e; font-size: .82rem; margin: 6px 0 2px; }
+
+  /* ── Video placeholders ── */
+  .video-placeholder {
+    background: var(--panel);
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 32px 24px;
+    text-align: center;
+    margin: 16px 0;
+  }
+  .video-placeholder .vp-icon { font-size: 2.5rem; margin-bottom: 12px; }
+  .video-placeholder .vp-title { font-size: 1rem; font-weight: 600; color: var(--text); margin-bottom: 6px; }
+  .video-placeholder .vp-desc { font-size: .85rem; color: var(--muted); }
+  .video-placeholder video { width: 100%; border-radius: 6px; display: none; }
+
+  /* ── Pipeline steps ── */
+  .pipeline {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 16px 0;
+  }
+  .pipe-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+  }
+  .pipe-step-inner {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin: 3px 0;
+    cursor: pointer;
+    transition: border-color .15s;
+    position: relative;
+  }
+  .pipe-step-inner:hover { border-color: var(--accent); }
+  .pipe-step-inner.open { border-color: var(--accent); background: #131d30; }
+  .pipe-num {
+    width: 26px; height: 26px;
+    background: var(--accent);
+    color: #000;
+    border-radius: 50%;
+    font-size: .78rem;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .pipe-text { flex: 1; }
+  .pipe-text h4 { margin: 0 0 4px; color: #c8d0e8; font-size: .9rem; text-transform: none; letter-spacing: 0; }
+  .pipe-text p { margin: 0; font-size: .85rem; color: var(--muted); }
+  .pipe-hint { font-size: .75rem; color: var(--muted); align-self: center; white-space: nowrap; flex-shrink: 0; }
+  .pipe-step-inner.open .pipe-hint { color: var(--accent); }
+  .pipe-expand {
+    font-size: .82rem;
+    color: #99b8d6;
+    background: #111e30;
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    padding: 12px 16px 14px 56px;
+    display: none;
+    margin: -4px 0 4px;
+    line-height: 1.6;
+  }
+  .pipe-expand.open { display: block; }
+
+  /* ── Grid legend ── */
+  .legend {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    font-size: .8rem;
+    margin: 8px 0 4px;
+    color: var(--muted);
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch { width: 14px; height: 14px; border-radius: 2px; flex-shrink: 0; }
+
+  /* ── Section nav ── */
+  .toc {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 28px 0 0;
+    display: flex;
+    gap: 6px 20px;
+    flex-wrap: wrap;
+    font-size: .85rem;
+  }
+  .toc a { color: var(--muted); }
+  .toc a:hover { color: var(--accent); }
+
+  /* ── Sensor geometry legend ── */
+  .sensor-row {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin: 12px 0;
+  }
+  .sensor-card {
+    flex: 1 1 200px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .sensor-card h4 { margin: 0 0 8px; color: var(--text); font-size: .88rem; text-transform: none; letter-spacing: 0; }
+  .sensor-card .sensor-icon { font-size: 1.4rem; margin-bottom: 6px; }
+  .sensor-card p { font-size: .82rem; color: var(--muted); margin: 0; }
+
+  /* ── Responsive ── */
+  @media (max-width: 680px) {
+    .card-row { flex-direction: column; }
+    .sensor-row { flex-direction: column; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ═══════════════════════════════════════════════
+     HEADER
+════════════════════════════════════════════════ -->
+<h1>OA Mapper — Technical Review</h1>
+<p class="doc-meta">
+  <span>Occupancy-Map Obstacle Avoidance</span>
+  <span>ACFR Seeker AUV</span>
+  <span style="color:#4a9eff">acfr-lcm</span>
+</p>
+
+<nav class="toc">
+  <a href="#overview">Overview</a>
+  <a href="#architecture">Architecture</a>
+  <a href="#grid">Occupancy Grid</a>
+  <a href="#sensors">Sensor Models</a>
+  <a href="#pipeline">Planning Pipeline</a>
+  <a href="#modes">Control Modes</a>
+  <a href="#lcm">LCM Integration</a>
+  <a href="#config">Configuration</a>
+  <a href="#testing">Testing</a>
+</nav>
+
+<!-- ═══════════════════════════════════════════════
+     OVERVIEW
+════════════════════════════════════════════════ -->
+<section id="overview">
+  <h2>Overview</h2>
+  <p>
+    The OA Mapper is a new probabilistic obstacle-avoidance system added to
+    <code>acfr-lcm</code> for the ACFR Seeker AUV. It maintains a 2-D voxel occupancy
+    grid anchored to the vehicle in the <strong>along-heading × depth</strong> plane,
+    fuses observations from three onboard sensors, and produces a continuous vertical
+    depth command that keeps the vehicle at a constant altitude above terrain while safely
+    crossing cliffs and avoiding obstacles ahead.
+  </p>
+  <div class="card-row">
+    <div class="card">
+      <h4>Core library</h4>
+      <p style="font-size:.87rem">
+        <code>auv_oavoid::OccupancyMap</code> and <code>ObstacleMapper</code> in
+        <code>src/acfr/oa-mapper/occupancy_map.*</code> — LCM-free C++ library containing
+        all grid logic, sensor updates, and planning. No framework dependency.
+      </p>
+    </div>
+    <div class="card">
+      <h4>LCM node</h4>
+      <p style="font-size:.87rem">
+        <code>oa_mapper.cpp</code> wraps the core library: subscribes to sensor and nav
+        LCM channels, calls the planning pipeline on every update, and publishes
+        <code>OA_COMMAND</code> + <code>OA_GRIDMAP</code> at the configured rate.
+      </p>
+    </div>
+    <div class="card">
+      <h4>Web visualizer</h4>
+      <p style="font-size:.87rem">
+        <code>src/acfr/python/oa-map-visualizer.py</code> subscribes to
+        <code>OA_GRIDMAP</code> and serves a live 3-panel view (top-down grid, depth
+        profile, 3-D terrain) at <code>http://localhost:8050</code>.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     ARCHITECTURE
+════════════════════════════════════════════════ -->
+<section id="architecture">
+  <h2>Architecture</h2>
+  <p>
+    The OA mapper runs as a standalone process alongside the existing vehicle software
+    stack. It is purely reactive — consuming sensor and nav LCM messages and publishing
+    commands — with no shared memory or direct coupling to the planner.
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 860 440" width="860" height="440" xmlns="http://www.w3.org/2000/svg"
+         style="font-family:'Segoe UI',system-ui,sans-serif; font-size:12px;">
+      <defs>
+        <marker id="arr-blue" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 Z" fill="#4a7aaa"/>
+        </marker>
+        <marker id="arr-green" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 Z" fill="#3a7060"/>
+        </marker>
+        <marker id="arr-accent" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 Z" fill="#4a9eff"/>
+        </marker>
+        <marker id="arr-teal" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+          <path d="M0,0 L0,6 L8,3 Z" fill="#3a9090"/>
+        </marker>
+      </defs>
+
+      <!-- ── Sensor sources (left column) ── -->
+      <rect x="20" y="60"  width="130" height="44" rx="5" fill="#1e2d3a" stroke="#3a5060" stroke-width="1.2"/>
+      <text x="85" y="78"  fill="#a0b8cc" font-size="11" font-weight="600" text-anchor="middle">DVL</text>
+      <text x="85" y="95"  fill="#6a8099" font-size="9"  text-anchor="middle">NUCLEUS.BOTTOMTRACK</text>
+
+      <rect x="20" y="130" width="130" height="44" rx="5" fill="#1e2d3a" stroke="#3a5060" stroke-width="1.2"/>
+      <text x="85" y="148" fill="#a0b8cc" font-size="11" font-weight="600" text-anchor="middle">Altimeter</text>
+      <text x="85" y="165" fill="#6a8099" font-size="9"  text-anchor="middle">NUCLEUS.ALTIMETER</text>
+
+      <rect x="20" y="200" width="130" height="44" rx="5" fill="#1e2d3a" stroke="#3a5060" stroke-width="1.2"/>
+      <text x="85" y="218" fill="#a0b8cc" font-size="11" font-weight="600" text-anchor="middle">Fwd Sonar</text>
+      <text x="85" y="235" fill="#6a8099" font-size="9"  text-anchor="middle">ISA500_FWD</text>
+
+      <!-- ── Nav source ── -->
+      <rect x="20" y="290" width="130" height="44" rx="5" fill="#1e2d3a" stroke="#3a5060" stroke-width="1.2"/>
+      <text x="85" y="308" fill="#a0b8cc" font-size="11" font-weight="600" text-anchor="middle">acfr-nav</text>
+      <text x="85" y="325" fill="#6a8099" font-size="9"  text-anchor="middle">ACFR_NAV</text>
+
+      <!-- ── LCM bus ── -->
+      <rect x="175" y="20" width="28" height="390" rx="4" fill="#102028" stroke="#2a4a5a" stroke-width="1.2"/>
+      <text x="189" y="218" fill="#4a9eff" font-size="10" font-weight="600" text-anchor="middle"
+            transform="rotate(-90,189,218)">LCM multicast bus</text>
+
+      <!-- Sensor arrows → LCM bus -->
+      <line x1="150" y1="82"  x2="175" y2="82"  stroke="#3a7060" stroke-width="1.3" marker-end="url(#arr-green)"/>
+      <line x1="150" y1="152" x2="175" y2="152" stroke="#3a7060" stroke-width="1.3" marker-end="url(#arr-green)"/>
+      <line x1="150" y1="222" x2="175" y2="222" stroke="#3a7060" stroke-width="1.3" marker-end="url(#arr-green)"/>
+      <line x1="150" y1="312" x2="175" y2="312" stroke="#3a7060" stroke-width="1.3" marker-end="url(#arr-green)"/>
+
+      <!-- HEARTBEAT dashed -->
+      <rect x="20" y="360" width="130" height="36" rx="5" fill="#151c28" stroke="#2a3a50" stroke-width="1" stroke-dasharray="4,3"/>
+      <text x="85" y="382" fill="#506070" font-size="9" text-anchor="middle">HEARTBEAT_5HZ</text>
+      <line x1="150" y1="378" x2="175" y2="378" stroke="#2a3a50" stroke-width="1" marker-end="url(#arr-blue)" stroke-dasharray="3,3"/>
+
+      <!-- ── OA Mapper (centre, highlighted) ── -->
+      <rect x="230" y="100" width="190" height="160" rx="7" fill="#162035" stroke="#4a9eff" stroke-width="2"/>
+      <text x="325" y="126" fill="#89d9ff" font-size="12" font-weight="700" text-anchor="middle">oa-mapper</text>
+      <line x1="250" y1="134" x2="405" y2="134" stroke="#2a3a50" stroke-width="1"/>
+      <text x="325" y="151" fill="#7a9ab8" font-size="10" text-anchor="middle">occupancy_map.cpp</text>
+      <text x="325" y="167" fill="#7a9ab8" font-size="10" text-anchor="middle">ObstacleMapper (thread-safe)</text>
+      <text x="325" y="185" fill="#6a8a9a" font-size="9"  text-anchor="middle">sensor updates → planning pipeline</text>
+      <text x="325" y="200" fill="#6a8a9a" font-size="9"  text-anchor="middle">OA_COMMAND @ 5 Hz</text>
+      <text x="325" y="215" fill="#6a8a9a" font-size="9"  text-anchor="middle">OA_GRIDMAP @ ~1 Hz</text>
+      <text x="325" y="232" fill="#506070" font-size="9"  text-anchor="middle">src/acfr/oa-mapper/</text>
+      <text x="325" y="248" fill="#506070" font-size="9"  text-anchor="middle">acfr.oa-mapper config key</text>
+
+      <!-- LCM bus → oa-mapper (sensors) -->
+      <line x1="203" y1="130" x2="230" y2="150" stroke="#3a9090" stroke-width="1.3" marker-end="url(#arr-teal)"/>
+      <line x1="203" y1="160" x2="230" y2="170" stroke="#3a9090" stroke-width="1.3" marker-end="url(#arr-teal)"/>
+      <line x1="203" y1="222" x2="230" y2="200" stroke="#3a9090" stroke-width="1.3" marker-end="url(#arr-teal)"/>
+      <line x1="203" y1="312" x2="230" y2="220" stroke="#3a7060" stroke-width="1.3" marker-end="url(#arr-green)"/>
+
+      <!-- ── Local planner ── -->
+      <rect x="470" y="100" width="185" height="80" rx="6" fill="#1a2840" stroke="#3a5a80" stroke-width="1.5"/>
+      <text x="562" y="122" fill="#7ec8ff" font-size="11" font-weight="600" text-anchor="middle">local-planner</text>
+      <text x="562" y="139" fill="#8899bb" font-size="9"  text-anchor="middle">local-planner-seeker-sitl</text>
+      <text x="562" y="155" fill="#8899bb" font-size="9"  text-anchor="middle">use_oa_mapper = true</text>
+      <text x="562" y="170" fill="#8899bb" font-size="9"  text-anchor="middle">vertical control from OA_COMMAND</text>
+
+      <!-- oa-mapper → planner -->
+      <line x1="420" y1="155" x2="470" y2="145" stroke="#4a9eff" stroke-width="1.8" marker-end="url(#arr-accent)"/>
+      <text x="440" y="142" fill="#4a9eff" font-size="9" font-weight="600">OA_COMMAND</text>
+
+      <!-- ── Thruster controller ── -->
+      <rect x="470" y="220" width="185" height="60" rx="6" fill="#1a2840" stroke="#3a5a80" stroke-width="1.5"/>
+      <text x="562" y="244" fill="#7ec8ff" font-size="11" font-weight="600" text-anchor="middle">thruster-controller</text>
+      <text x="562" y="261" fill="#8899bb" font-size="9"  text-anchor="middle">minbus-control</text>
+      <text x="562" y="276" fill="#8899bb" font-size="9"  text-anchor="middle">vx / vz PID</text>
+
+      <!-- planner → thruster -->
+      <line x1="562" y1="180" x2="562" y2="220" stroke="#4a7aaa" stroke-width="1.3" marker-end="url(#arr-blue)"/>
+
+      <!-- ── OA Map Visualizer ── -->
+      <rect x="470" y="320" width="185" height="60" rx="6" fill="#1e3a2f" stroke="#3a7a5a" stroke-width="1.5"/>
+      <text x="562" y="344" fill="#7ecba1" font-size="11" font-weight="600" text-anchor="middle">oa-map-visualizer.py</text>
+      <text x="562" y="361" fill="#8899bb" font-size="9"  text-anchor="middle">WebSocket + HTTP</text>
+      <text x="562" y="376" fill="#8899bb" font-size="9"  text-anchor="middle">http://localhost:8050</text>
+
+      <!-- oa-mapper → viz (dashed) -->
+      <line x1="420" y1="210" x2="562" y2="320" stroke="#3a7a5a" stroke-width="1.2" stroke-dasharray="5,3" marker-end="url(#arr-green)"/>
+      <text x="500" y="282" fill="#3a7a5a" font-size="9">OA_GRIDMAP</text>
+
+      <!-- ── Sensors legend label ── -->
+      <text x="85" y="44" fill="#5a7090" font-size="10" font-weight="600" text-anchor="middle">Onboard sensors</text>
+    </svg>
+  </div>
+
+  <div class="callout">
+    The OA mapper integrates with the existing vehicle stack through a single config flag:
+    <code>use_oa_mapper = true</code> in <code>local-planner-seeker-sitl</code>. When false,
+    the mapper still runs and publishes but the planner ignores <code>OA_COMMAND</code> and
+    uses its legacy altitude logic.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     OCCUPANCY GRID
+════════════════════════════════════════════════ -->
+<section id="grid">
+  <h2>Occupancy Grid</h2>
+  <p>
+    The grid is a 2-D probabilistic map in the vehicle's <strong>along-heading × depth</strong>
+    frame. Cells store occupancy probability in [0, 1]. The prior is 0.5 (unknown). A cell is
+    considered occupied when its probability exceeds the <code>occ_thresh</code> (default 0.62).
+  </p>
+
+  <h3>Grid geometry (SITL defaults)</h3>
+  <div class="card-row">
+    <div class="card">
+      <h4>Dimensions</h4>
+      <table>
+        <tr><td><code>nx</code></td><td>60 columns (30 m × 0.5 m cell)</td></tr>
+        <tr><td><code>nz</code></td><td>160 rows (40 m × 0.25 m cell)</td></tr>
+        <tr><td><code>cx</code></td><td>30 — vehicle column index</td></tr>
+        <tr><td><code>horizon_fwd</code></td><td>15 m ahead of vehicle</td></tr>
+        <tr><td><code>horizon_back</code></td><td>15 m behind vehicle</td></tr>
+        <tr><td><code>z_half_range</code></td><td>±20 m depth window</td></tr>
+      </table>
+    </div>
+    <div class="card">
+      <h4>Motion tracking</h4>
+      <p style="font-size:.87rem">
+        The grid scrolls with the vehicle. On each nav update:
+      </p>
+      <ul style="font-size:.85rem">
+        <li><code>advance(ds)</code> — shift columns left by <em>ds</em> m progress; new columns on the right initialise to prior 0.5</li>
+        <li><code>shift_depth(z)</code> — re-centre depth axis on vehicle depth; new rows initialise to prior 0.5</li>
+        <li>A teleport guard resets the grid if the jump exceeds the grid length</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Stale-voxel clearing</h3>
+  <p>
+    Each occupied cell records the vehicle heading at the time it was observed
+    (<code>voxel_heading_</code>). On every update tick, cells whose recorded heading
+    differs from the current heading by more than <code>stale_heading_threshold_deg</code>
+    (default 45°) are reset to the prior. This ensures that on a heading reversal (e.g.
+    lawnmower turn), terrain seen from the opposite direction does not persist and generate
+    ghost obstacles.
+  </p>
+  <p>
+    Cells directly beneath the vehicle body (within ±vehicle_length/2 in the along-track
+    direction from <code>cx</code>) are explicitly <strong>not</strong> cleared — their
+    heading stamp is refreshed to the current heading on every tick. This preserves
+    bottom terrain observations under the vehicle across turns, preventing the AUV from
+    losing its altitude reference immediately after changing heading.
+  </p>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     SENSOR MODELS
+════════════════════════════════════════════════ -->
+<section id="sensors">
+  <h2>Sensor Models</h2>
+  <p>
+    All three sensors use the same probabilistic ray-marching approach: free cells along
+    the ray path receive a miss decrement; the endpoint receives a hit increment or miss
+    decrement depending on whether a surface was detected.
+  </p>
+
+  <div class="sensor-row">
+    <div class="sensor-card">
+      <div class="sensor-icon">📡</div>
+      <h4>DVL — <code>NUCLEUS.BOTTOMTRACK</code></h4>
+      <p>3 beams at 20° slant angle, evenly spaced at 0° / 120° / 240° heading offsets.
+        Only the forward-axis beam (0° offset) is axis-aligned; it alone clears voxels
+        along its path. Lateral beams only mark their endpoint to avoid clearing voxels
+        the 3-D beam never passed through in the projected 2-D plane.<br><br>
+        Also provides a direct altitude estimate from the minimum vertical component of
+        surface-hitting beams.
+      </p>
+    </div>
+    <div class="sensor-card">
+      <div class="sensor-icon">🔊</div>
+      <h4>Altimeter — <code>NUCLEUS.ALTIMETER</code></h4>
+      <p>Straight-down beam at vehicle X position. Ray-marches vertically through the
+        depth column. Hit when range &lt; max_range − 0.05 m. Miss (full range) clears
+        along the path and marks the endpoint as free.<br><br>
+        The altimeter altitude estimate is combined with the DVL estimate in
+        <code>ObstacleMapper::get_altitude()</code> — the minimum of both valid readings
+        is reported.
+      </p>
+    </div>
+    <div class="sensor-card">
+      <div class="sensor-icon">🔭</div>
+      <h4>Fwd Sonar — <code>ISA500_FWD</code></h4>
+      <p>Fan of 7 rays spanning ±5° vertical half-angle, fired from the vehicle nose
+        forward in the heading direction. Surface reflection filter: measurements are
+        silently dropped when vehicle depth &lt; <code>sonar_min_depth_m</code> (1 m) to
+        reject near-surface returns in shallow water.<br><br>
+        Updates grid cells at the nose position (not vehicle body centre), matching the
+        physical sensor location.
+      </p>
+    </div>
+  </div>
+
+  <h3>Sensor beam geometry</h3>
+  <div class="diagram">
+    <svg viewBox="0 0 900 320" width="900" height="320" xmlns="http://www.w3.org/2000/svg"
+         style="font-family:'Segoe UI',system-ui,sans-serif; font-size:12px;">
+      <!-- Ground -->
+      <path d="M30,240 Q150,230 250,250 Q370,270 500,245 Q600,230 870,255" stroke="#5a8a5a" stroke-width="2" fill="none"/>
+      <text x="450" y="270" fill="#5a8a5a" font-size="11" text-anchor="middle">Seafloor</text>
+
+      <!-- Water column shading -->
+      <rect x="30" y="60" width="840" height="185" fill="#0a1520" opacity="0.5"/>
+
+      <!-- Vehicle body -->
+      <g transform="translate(260,145)">
+        <ellipse cx="0" cy="0" rx="30" ry="10" fill="#c84030"/>
+        <text x="0" y="25" fill="#e08070" font-size="10" text-anchor="middle">Vehicle (cx)</text>
+      </g>
+
+      <!-- DVL beams (3 beams) -->
+      <!-- Beam 0: forward-ish, 20° from vertical -->
+      <line x1="260" y1="145" x2="295" y2="243" stroke="#4a9eff" stroke-width="1.5" stroke-dasharray="5,2"/>
+      <text x="305" y="200" fill="#4a9eff" font-size="10">DVL B0 (0°)</text>
+      <!-- Beam 1: 120° offset (back-left in 3D, projected slightly back) -->
+      <line x1="245" y1="148" x2="215" y2="238" stroke="#5a7aee" stroke-width="1.5" stroke-dasharray="5,2"/>
+      <text x="155" y="218" fill="#5a7aee" font-size="10">DVL B1 (120°)</text>
+      <!-- Beam 2: 240° offset -->
+      <line x1="275" y1="148" x2="245" y2="238" stroke="#5a7aee" stroke-width="1.5" stroke-dasharray="5,2"/>
+
+      <!-- Altimeter -->
+      <line x1="260" y1="155" x2="260" y2="250" stroke="#f0d060" stroke-width="2" stroke-dasharray="4,2"/>
+      <text x="268" y="218" fill="#f0d060" font-size="10">Altimeter</text>
+
+      <!-- Forward sonar fan (7 rays from nose) -->
+      <!-- Nose at x=290 -->
+      <line x1="290" y1="145" x2="540" y2="240" stroke="#7ecba1" stroke-width="1.2" opacity="0.7"/>
+      <line x1="290" y1="145" x2="545" y2="210" stroke="#7ecba1" stroke-width="1.2" opacity="0.8"/>
+      <line x1="290" y1="145" x2="548" y2="155" stroke="#7ecba1" stroke-width="1.5"/>
+      <line x1="290" y1="145" x2="545" y2="100" stroke="#7ecba1" stroke-width="1.2" opacity="0.8"/>
+      <line x1="290" y1="145" x2="538" y2="75" stroke="#7ecba1" stroke-width="1.2" opacity="0.7"/>
+      <!-- Half-angle arcs -->
+      <path d="M320,145 A30,30 0 0,0 319,137" stroke="#7ecba1" stroke-width="1" fill="none" opacity="0.5"/>
+      <path d="M320,145 A30,30 0 0,1 319,153" stroke="#7ecba1" stroke-width="1" fill="none" opacity="0.5"/>
+      <text x="556" y="158" fill="#7ecba1" font-size="10">Fwd Sonar</text>
+      <text x="556" y="172" fill="#6a9a80" font-size="9">(7 rays, ±5°)</text>
+
+      <!-- Labels & annotations -->
+      <text x="30" y="55" fill="#6a9ab8" font-size="11">Forward (along heading) →</text>
+      <text x="30" y="90" fill="#6a9ab8" font-size="9" transform="rotate(90,30,90)">Depth ↓</text>
+
+      <!-- Legend -->
+      <line x1="700" y1="80" x2="730" y2="80" stroke="#4a9eff" stroke-width="1.5" stroke-dasharray="5,2"/>
+      <text x="737" y="84" fill="#4a9eff" font-size="10">DVL (axis-aligned clears)</text>
+      <line x1="700" y1="100" x2="730" y2="100" stroke="#5a7aee" stroke-width="1.5" stroke-dasharray="5,2"/>
+      <text x="737" y="104" fill="#5a7aee" font-size="10">DVL (endpoint only)</text>
+      <line x1="700" y1="120" x2="730" y2="120" stroke="#f0d060" stroke-width="2" stroke-dasharray="4,2"/>
+      <text x="737" y="124" fill="#f0d060" font-size="10">Altimeter</text>
+      <line x1="700" y1="140" x2="730" y2="140" stroke="#7ecba1" stroke-width="1.5"/>
+      <text x="737" y="144" fill="#7ecba1" font-size="10">Fwd Sonar</text>
+
+      <!-- Hit / miss probability labels -->
+      <circle cx="295" cy="243" r="5" fill="#c84030" opacity="0.8"/>
+      <text x="302" y="247" fill="#e08070" font-size="9">hit: p += 0.5</text>
+      <circle cx="260" cy="250" r="5" fill="#c84030" opacity="0.8"/>
+      <circle cx="548" cy="155" r="5" fill="#c84030" opacity="0.8"/>
+    </svg>
+  </div>
+
+  <h3>Observation model parameters</h3>
+  <table>
+    <thead>
+      <tr><th>Sensor</th><th>hit_prob</th><th>miss_prob</th><th>max_occ</th><th>min_occ</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>DVL</td><td><code>0.50</code></td><td><code>0.30</code></td><td><code>0.98</code></td><td><code>0.02</code></td></tr>
+      <tr><td>Altimeter</td><td><code>0.50</code></td><td><code>0.30</code></td><td><code>0.98</code></td><td><code>0.02</code></td></tr>
+      <tr><td>Fwd Sonar</td><td><code>0.30</code></td><td><code>0.20</code></td><td><code>0.98</code></td><td><code>0.02</code></td></tr>
+    </tbody>
+  </table>
+  <p style="font-size:.85rem">
+    The sonar uses lower probabilities because it is noisier (ISA500 single-beam range sonar
+    vs. Nucleus acoustic Doppler). A hit still drives cells well above the 0.62 threshold
+    after ~2 consecutive detections.
+  </p>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     PLANNING PIPELINE
+════════════════════════════════════════════════ -->
+<section id="pipeline">
+  <h2>Planning Pipeline</h2>
+  <p>
+    <code>OccupancyMap::update()</code> is called on every sensor callback and on every
+    pose update. It runs four steps in sequence and returns the commanded depth at the
+    vehicle column.
+  </p>
+
+  <div class="pipeline" id="pipeline-steps"></div>
+
+  <h3>Cliff-top latch</h3>
+  <p>
+    The latch is the core mechanism for handling forward cliffs. When the forward-obstacle
+    scan detects a rise in the look-ahead window it <em>commits</em> to a target depth
+    equal to the shallowest detected obstacle minus <code>imaging_altitude</code>.
+    The latch persists until the vehicle has physically passed the obstacle peak plus a
+    <code>cliff_standoff</code> + vehicle-length margin. This prevents premature altitude
+    resumption before the tail has cleared the obstacle.
+  </p>
+  <p>
+    An additional heading guard releases the latch early if the vehicle has turned &gt;45°
+    from the heading at latch commit, which indicates the occupancy voxels disappeared
+    due to a heading change (lawnmower turn), not because the obstacle was cleared.
+  </p>
+
+  <h3>Safety tail cap</h3>
+  <p>
+    Before finalising commanded depth, a separate scan checks the terrain band immediately
+    behind the vehicle within <code>safety_standoff_m</code>. If terrain in this region
+    falls within <code>safety_below_m</code> of the current vehicle depth, the commanded
+    depth for all forward columns is capped at the current vehicle depth — preventing the
+    planner from issuing a descent command that would drive the tail into terrain.
+  </p>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     CONTROL MODES
+════════════════════════════════════════════════ -->
+<section id="modes">
+  <h2>Control Modes</h2>
+  <p>
+    The mode is updated at the end of every planning cycle. Click a state to see the
+    commanded output and transition conditions.
+  </p>
+
+  <div class="diagram state-machine" id="sm-diagram"></div>
+  <div id="sm-detail-box" class="sm-detail"></div>
+
+  <h3>OA_COMMAND output by mode</h3>
+  <table>
+    <thead>
+      <tr><th>Mode</th><th>vertical_mode</th><th>vertical_target</th><th>vx</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="tag tag-mode">ALT_FOLLOW</span></td>
+        <td><code>ALT_FOLLOW</code></td>
+        <td><code>imaging_altitude</code> (2 m)</td>
+        <td><code>survey_speed</code> (0.5 m/s)</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-mode">OBSTACLE_HOLD</span></td>
+        <td><code>DEPTH_HOLD</code></td>
+        <td>cmd_depth at vehicle column</td>
+        <td><code>survey_speed</code></td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-mode">OBSTACLE_CLEAR</span></td>
+        <td><code>DEPTH_HOLD</code></td>
+        <td>cmd_depth at vehicle column</td>
+        <td>0 m/s until depth reached, then survey_speed</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-mode">ALT_CORRECTION</span></td>
+        <td><code>DEPTH_HOLD</code></td>
+        <td>cmd_depth at vehicle column</td>
+        <td>0 m/s until depth reached</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-mode">TAIL_CLEAR</span></td>
+        <td><code>DEPTH_HOLD</code></td>
+        <td>current vehicle depth</td>
+        <td><code>survey_speed</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout warn">
+    The local planner only acts on <code>OA_COMMAND</code> when <code>use_oa_mapper = true</code>.
+    When false the mapper still runs and publishes but the planner uses its own legacy altitude
+    logic. The OA_GRIDMAP channel is always published regardless.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     LCM INTEGRATION
+════════════════════════════════════════════════ -->
+<section id="lcm">
+  <h2>LCM Integration</h2>
+  <p>
+    The <code>oa-mapper</code> binary is the only process with LCM dependencies.
+    The core library (<code>occupancy_map.*</code>) is framework-free and directly
+    usable as a C++ library or Python extension.
+  </p>
+
+  <h3>Subscribed channels</h3>
+  <table>
+    <thead>
+      <tr><th>Channel</th><th>Message type</th><th>Role</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>&lt;Vehicle Name&gt;.ACFR_NAV</code></td>
+        <td><code>auv_acfr_nav_t</code></td>
+        <td>Sole pose source (north, east, depth, heading). Updates grid position via <code>advance()</code> / <code>shift_depth()</code> on every message.</td>
+      </tr>
+      <tr>
+        <td><code>&lt;Vehicle Name&gt;.NUCLEUS.BOTTOMTRACK</code></td>
+        <td><code>nucleus_bottomtrack_t</code></td>
+        <td>DVL 3-beam bottom-track ranges + validity flags. Fixed 3-element array; <code>distance_beam_valid</code> + non-zero range determine hit. ~8 Hz.</td>
+      </tr>
+      <tr>
+        <td><code>&lt;Vehicle Name&gt;.NUCLEUS.ALTIMETER</code></td>
+        <td><code>nucleus_altimeter_t</code></td>
+        <td>Single altimeter range in metres. Hit if range &lt; max_range − 0.05 m. ~2 Hz.</td>
+      </tr>
+      <tr>
+        <td><code>&lt;Vehicle Name&gt;.ISA500_FWD</code></td>
+        <td><code>isa500_t</code></td>
+        <td>Forward sonar range in metres. Hit if range &lt; max_range − 0.1 m. ~1 Hz.</td>
+      </tr>
+      <tr>
+        <td><code>HEARTBEAT_5HZ</code></td>
+        <td><code>heartbeat_t</code></td>
+        <td>Rate gate for publishing. <code>OA_COMMAND</code> every tick (5 Hz); <code>OA_GRIDMAP</code> every <code>gridmap_decimation</code> ticks (~1 Hz by default).</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Published channels</h3>
+  <table>
+    <thead>
+      <tr><th>Channel</th><th>Message type</th><th>Contents</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>&lt;Vehicle Name&gt;.OA_COMMAND</code></td>
+        <td><code>auv_oa_command_t</code></td>
+        <td>vertical_mode, vertical_target, vx, altitude estimate, control_mode string. Published at 5 Hz.</td>
+      </tr>
+      <tr>
+        <td><code>&lt;Vehicle Name&gt;.OA_GRIDMAP</code></td>
+        <td><code>auv_oa_gridmap_t</code></td>
+        <td>Full grid serialised row-major as float32; manifold_z and cmd_depth vectors; vehicle pose; DVL altitude. Published at ~1 Hz.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Code structure</h3>
+  <pre><code>acfr-lcm/src/acfr/oa-mapper/
+  ├── occupancy_map.hpp   <span class="cmt">// LCM-free core: OccupancyMap + ObstacleMapper</span>
+  ├── occupancy_map.cpp
+  ├── oa_mapper.hpp       <span class="cmt">// LCM node: sensor callbacks + publish</span>
+  └── oa_mapper.cpp
+
+acfr-lcm/src/acfr/python/
+  └── oa-map-visualizer.py  <span class="cmt">// WebSocket + HTTP viz, http://localhost:8050</span>
+
+acfr-lcm/config/
+  └── seeker-sitl.cfg       <span class="cmt">// acfr.oa-mapper config block</span></code></pre>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     CONFIGURATION
+════════════════════════════════════════════════ -->
+<section id="config">
+  <h2>Configuration</h2>
+  <p>
+    All parameters are loaded from <code>acfr-lcm/config/seeker-sitl.cfg</code> under the
+    <code>acfr.oa-mapper</code> key. Every key is optional; omitted keys fall back to the
+    C++ struct defaults.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Parameter</th><th>Default</th><th>Description</th></tr>
+    </thead>
+    <tbody>
+      <tr><td colspan="3" style="background:#0e1520; color:#5a7090; font-size:.8rem; padding:6px 12px">Grid geometry</td></tr>
+      <tr><td><code>dx</code></td><td>0.5 m</td><td>Along-track cell width</td></tr>
+      <tr><td><code>dz</code></td><td>0.25 m</td><td>Depth cell height</td></tr>
+      <tr><td><code>horizon_fwd</code></td><td>15.0 m</td><td>Forward look-ahead extent</td></tr>
+      <tr><td><code>horizon_back</code></td><td>15.0 m</td><td>Rear history extent</td></tr>
+      <tr><td><code>z_half_range</code></td><td>20.0 m</td><td>Half the total depth window</td></tr>
+
+      <tr><td colspan="3" style="background:#0e1520; color:#5a7090; font-size:.8rem; padding:6px 12px">Vehicle / mission</td></tr>
+      <tr><td><code>vehicle_length</code></td><td>2.0 m</td><td>Used for forward-obstacle and tail-clear geometry</td></tr>
+      <tr><td><code>imaging_altitude</code></td><td>2.0 m</td><td>Target altitude above terrain</td></tr>
+      <tr><td><code>survey_speed</code></td><td>0.5 m/s</td><td>Forward speed in ALT_FOLLOW / OBSTACLE_HOLD</td></tr>
+      <tr><td><code>vertical_speed</code></td><td>0.5 m/s</td><td>Max depth change rate in depth-hold</td></tr>
+
+      <tr><td colspan="3" style="background:#0e1520; color:#5a7090; font-size:.8rem; padding:6px 12px">Planning / safety</td></tr>
+      <tr><td><code>cliff_standoff</code></td><td>2.0 m</td><td>Extra clearance past obstacle peak before releasing latch</td></tr>
+      <tr><td><code>obstacle_threshold</code></td><td>1.0 m</td><td>Minimum manifold rise to trigger forward-obstacle detection</td></tr>
+      <tr><td><code>altitude_overshoot_threshold_m</code></td><td>1.0 m</td><td>Depth error magnitude to enter OBSTACLE_CLEAR / ALT_CORRECTION</td></tr>
+      <tr><td><code>altitude_overshoot_hysteresis_m</code></td><td>0.5 m</td><td>Hysteresis band to prevent mode chatter</td></tr>
+      <tr><td><code>stale_heading_threshold_deg</code></td><td>45°</td><td>Heading change before voxels are cleared as stale</td></tr>
+      <tr><td><code>safety_standoff_m</code></td><td>2.0 m</td><td>Tail-clear scan reach behind vehicle</td></tr>
+      <tr><td><code>safety_below_m</code></td><td>1.0 m</td><td>Tail-clear depth tolerance band</td></tr>
+      <tr><td><code>occ_thresh</code></td><td>0.62</td><td>Occupancy probability threshold</td></tr>
+      <tr><td><code>sonar_min_depth_m</code></td><td>1.0 m</td><td>Minimum vehicle depth to use forward sonar</td></tr>
+
+      <tr><td colspan="3" style="background:#0e1520; color:#5a7090; font-size:.8rem; padding:6px 12px">Sensor ranges</td></tr>
+      <tr><td><code>dvl_max_range</code></td><td>25.0 m</td><td>DVL maximum valid range</td></tr>
+      <tr><td><code>altimeter_max_range</code></td><td>25.0 m</td><td>Altimeter maximum valid range</td></tr>
+      <tr><td><code>sonar_max_range</code></td><td>100.0 m</td><td>Fwd sonar maximum valid range</td></tr>
+      <tr><td><code>sonar_half_angle</code></td><td>5.0°</td><td>Forward sonar half beam angle</td></tr>
+
+      <tr><td colspan="3" style="background:#0e1520; color:#5a7090; font-size:.8rem; padding:6px 12px">Publish rate</td></tr>
+      <tr><td><code>gridmap_decimation</code></td><td>5</td><td>Publish OA_GRIDMAP every Nth HEARTBEAT_5HZ tick (~1 Hz)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════════════════════════════════════
+     TESTING
+════════════════════════════════════════════════ -->
+<section id="testing">
+  <h2>Testing</h2>
+
+  <h3>1. Standalone logic simulator</h3>
+  <p>
+    Before vehicle integration the algorithm was validated in a standalone Python simulator
+    that drives the same occupancy-map core against synthetic terrain profiles — sawtooth
+    slopes, cliffs, random reef bathymetry — at configurable sensor rates. This confirms
+    mode transitions and altitude-following behaviour independently of any hardware or
+    middleware.
+  </p>
+
+  <!-- VIDEO PLACEHOLDERS 1a–1c: logic simulator terrain profiles -->
+  <div class="video-placeholder" id="vp1">
+    <div class="vp-icon">🎬</div>
+    <div class="vp-title">Sawtooth terrain</div>
+    <div class="vp-desc">
+      Repeating cliff faces — exercises the full OBSTACLE_HOLD → OBSTACLE_CLEAR → OBSTACLE_HOLD
+      → ALT_FOLLOW cycle and verifies the latch commits and releases correctly on each peak.
+    </div>
+    <video id="vid1" controls></video>
+    <div style="margin-top:14px">
+      <button class="btn" onclick="uploadVideo('vid1','vp1')">Attach video file</button>
+      <input type="file" id="file1" accept="video/*" style="display:none" onchange="loadVideoFile(this,'vid1','vp1')">
+    </div>
+  </div>
+
+  <div class="video-placeholder" id="vp2">
+    <div class="vp-icon">🎬</div>
+    <div class="vp-title">Continuous slope</div>
+    <div class="vp-desc">
+      Gradually rising and falling terrain — confirms smooth altitude following
+      (ALT_FOLLOW) and correct triggering of ALT_CORRECTION on descent without false
+      obstacle latches.
+    </div>
+    <video id="vid2" controls></video>
+    <div style="margin-top:14px">
+      <button class="btn" onclick="uploadVideo('vid2','vp2')">Attach video file</button>
+      <input type="file" id="file2" accept="video/*" style="display:none" onchange="loadVideoFile(this,'vid2','vp2')">
+    </div>
+  </div>
+
+  <div class="video-placeholder" id="vp3">
+    <div class="vp-icon">🎬</div>
+    <div class="vp-title">Random terrain</div>
+    <div class="vp-desc">
+      Stochastic bathymetry with irregular peaks and troughs — stress-tests mode stability
+      and stale-voxel clearing under varied heading changes and sensor update rates.
+    </div>
+    <video id="vid3" controls></video>
+    <div style="margin-top:14px">
+      <button class="btn" onclick="uploadVideo('vid3','vp3')">Attach video file</button>
+      <input type="file" id="file3" accept="video/*" style="display:none" onchange="loadVideoFile(this,'vid3','vp3')">
+    </div>
+  </div>
+
+  <h3>2. Vehicle SITL in Gazebo</h3>
+  <p>
+    End-to-end integration test with the Seeker vehicle model in Gazebo. All three sensors
+    (DVL, altimeter, forward sonar) feed live LCM messages into <code>oa-mapper</code>
+    running inside the vehicle software container. The OA map visualizer at
+    <code>http://localhost:8050</code> provides live 2-D top-down, depth profile, and 3-D
+    terrain views during the mission.
+  </p>
+
+  <!-- VIDEO PLACEHOLDER 4: Gazebo SITL -->
+  <div class="video-placeholder" id="vp4">
+    <div class="vp-icon">🎬</div>
+    <div class="vp-title">Screen recording: AUV SITL in Gazebo with OA mapper active</div>
+    <div class="vp-desc">
+      Demonstrates the vehicle navigating terrain with obstacle avoidance active,
+      showing the OA map visualizer alongside the Gazebo / RViz views.
+    </div>
+    <video id="vid4" controls></video>
+    <div style="margin-top:14px">
+      <button class="btn" onclick="uploadVideo('vid4','vp4')">Attach video file</button>
+      <input type="file" id="file4" accept="video/*" style="display:none" onchange="loadVideoFile(this,'vid4','vp4')">
+    </div>
+  </div>
+
+  <h3>3. Real vehicle LCM log replay</h3>
+  <p>
+    The mapper and visualizer can be driven from a recorded vehicle LCM log using
+    <code>lcm-logplayer</code>, with no hardware or simulator required. This validates that
+    the algorithm responds correctly to real sensor noise, dropout patterns, and navigation
+    timing from an actual dive.
+  </p>
+  <div class="callout">
+    <strong>Replay command:</strong>
+    <code>lcm-logplayer --speed 1.0 &lt;logfile.lcm&gt;</code><br>
+    The mapper node and visualizer start normally; the log republishes all LCM channels at
+    recorded timing. Set <code>speed &lt; 1.0</code> to slow playback for detailed inspection.
+  </div>
+
+  <!-- VIDEO PLACEHOLDER 5: real vehicle log replay -->
+  <div class="video-placeholder" id="vp5">
+    <div class="vp-icon">🎬</div>
+    <div class="vp-title">Screen recording: real vehicle LCM log with OA mapper visualizer</div>
+    <div class="vp-desc">
+      Shows the occupancy grid and cmd_depth profile building up from real sensor data,
+      with mode transitions overlaid in the visualizer.
+    </div>
+    <video id="vid5" controls></video>
+    <div style="margin-top:14px">
+      <button class="btn" onclick="uploadVideo('vid5','vp5')">Attach video file</button>
+      <input type="file" id="file5" accept="video/*" style="display:none" onchange="loadVideoFile(this,'vid5','vp5')">
+    </div>
+  </div>
+
+  <h3>Useful debug tools</h3>
+  <table>
+    <thead><tr><th>Tool</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>OccupancyMap::get_debug_summary()</code></td><td>C++ ASCII table of manifold_z and cmd_depth in a ±6-column window around cx; printed to stdout by oa-mapper on each heartbeat tick</td></tr>
+      <tr><td><code>OA_GRIDMAP</code> + visualizer</td><td>Live grid inspection, manifold overlay, and cmd_depth profile at http://localhost:8050</td></tr>
+      <tr><td><code>/snapshot</code> endpoint</td><td>Self-contained frozen Plotly 3-D terrain page at http://localhost:8050/snapshot for interactive camera exploration without live updates</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</div><!-- .page -->
+
+<!-- ═══════════════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════════════ -->
+<script>
+// ─────────────────────────────────────────────
+// Pipeline steps
+// ─────────────────────────────────────────────
+const STEPS = [
+  {
+    title: 'clear_stale_voxels(heading)',
+    short: 'Reset cells observed from headings differing >45° from current heading.',
+    detail: `Each occupied cell stores the vehicle heading at the time it was observed
+    (<code>voxel_heading_</code>). Cells observed from a heading that now differs by more
+    than <code>stale_heading_threshold_deg</code> (45°) are reset to the prior 0.5.<br><br>
+    Cells under the vehicle body (±vehicle_length/2 in x) are refreshed to the current heading
+    first, so they are never stale even when turning.`
+  },
+  {
+    title: 'build_cliff_manifold()',
+    short: 'Extract the shallowest occupied voxel per column → manifold_z[].',
+    detail: `Pass 1: find the shallowest occupied cell (p > occ_thresh) per column.<br><br>
+    Pass 2 (behind vehicle, columns 0…cx−1): use the observation if present; otherwise default
+    to the grid bottom.<br><br>
+    Pass 3 (at and ahead of vehicle, columns cx…nx−1): use the observation if present;
+    otherwise forward-extend the last seen manifold depth. This means the planner can
+    already predict the needed altitude change before the vehicle reaches an observed cliff.
+    Columns with no observation at all default to grid bottom.`
+  },
+  {
+    title: 'build_commanded_depth(vehicle_depth)',
+    short: 'Compute target depth per column: baseline altitude + obstacle latch + safety cap.',
+    detail: `<strong>Step 1 — baseline:</strong> for each column, <code>cmd_depth = max(0, manifold_z − imaging_altitude)</code>.
+    At the vehicle column, the DVL altitude estimate is also used to adjust cmd_depth upward
+    (but never shallower than the manifold-based value).<br><br>
+    <strong>Step 2 — cliff latch:</strong> if the forward-obstacle scan finds a rise within
+    the cliff_standoff window, a latch commits to a single target depth equal to the peak
+    minus imaging_altitude. The latch overrides all forward columns until the vehicle
+    physically clears the obstacle.<br><br>
+    <strong>Step 3 — safety tail cap:</strong> if terrain is in the safety_below_m band
+    behind the vehicle, cap all forward cmd_depth values at the current vehicle depth
+    (prevents descent into terrain behind the tail).<br><br>
+    <strong>Step 4 — propagate:</strong> unobserved forward columns inherit the vehicle-column
+    depth so the planner always has a sensible target even without forward sonar data.`
+  },
+  {
+    title: 'build_path_waypoints()',
+    short: 'Convert cmd_depth[] into a piecewise-linear waypoint list. Currently used for visualization only.',
+    detail: `Walks cmd_depth from cx to nx. When the depth changes by more than
+    2×dz between adjacent columns, a horizontal segment is emitted at the previous depth
+    (to allow lateral clearance at the cliff edge) before a vertical segment at the new depth,
+    producing a staircase-shaped (world_x, depth) polyline.<br><br>
+    <strong>Note:</strong> the waypoints are computed and stored in
+    <code>path_waypoints_</code> but are <em>not</em> currently published in
+    <code>OA_COMMAND</code> or <code>OA_GRIDMAP</code> and are not consumed by the
+    local planner. The planner acts solely on the scalar
+    <code>vertical_mode</code> / <code>vertical_target</code> / <code>vx</code> fields
+    in <code>OA_COMMAND</code>. The waypoint list is retained as a foundation for a
+    future path-following interface.`
+  },
+];
+
+const pipelineEl = document.getElementById('pipeline-steps');
+STEPS.forEach((s, i) => {
+  const outer = document.createElement('div');
+  outer.className = 'pipe-step';
+  outer.innerHTML = `
+    <div class="pipe-step-inner" onclick="togglePipe(${i})">
+      <div class="pipe-num">${i+1}</div>
+      <div class="pipe-text">
+        <h4><code>${s.title}</code></h4>
+        <p>${s.short}</p>
+      </div>
+      <span class="pipe-hint">click to expand</span>
+    </div>`;
+  const expand = document.createElement('div');
+  expand.className = 'pipe-expand';
+  expand.id = `pipe-expand-${i}`;
+  expand.innerHTML = s.detail;
+  pipelineEl.appendChild(outer);
+  pipelineEl.appendChild(expand);
+});
+
+function togglePipe(i) {
+  const el = document.getElementById(`pipe-expand-${i}`);
+  const isOpen = el.classList.contains('open');
+  document.querySelectorAll('.pipe-expand').forEach(e => e.classList.remove('open'));
+  document.querySelectorAll('.pipe-step-inner').forEach(e => {
+    e.classList.remove('open');
+    e.querySelector('.pipe-hint').textContent = 'click to expand';
+  });
+  if (!isOpen) {
+    el.classList.add('open');
+    const inner = el.previousElementSibling;
+    inner.classList.add('open');
+    inner.querySelector('.pipe-hint').textContent = 'click to collapse';
+  }
+}
+
+// ─────────────────────────────────────────────
+// State machine diagram
+// ─────────────────────────────────────────────
+const SM_DATA = {
+  ALT_FOLLOW:     { x:260, y:80,  w:140, h:44, col:'#1e3560', stroke:'#4a7aee', label:'ALT_FOLLOW' },
+  OBSTACLE_HOLD:  { x:60,  y:200, w:140, h:44, col:'#3a2020', stroke:'#e06060', label:'OBSTACLE_HOLD' },
+  OBSTACLE_CLEAR: { x:260, y:200, w:140, h:44, col:'#3a2020', stroke:'#ff4040', label:'OBSTACLE_CLEAR' },
+  ALT_CORRECTION: { x:460, y:200, w:140, h:44, col:'#3a2020', stroke:'#f0a04b', label:'ALT_CORRECTION' },
+  TAIL_CLEAR:     { x:460, y:80,  w:140, h:44, col:'#202830', stroke:'#6a9abb', label:'TAIL_CLEAR' },
+};
+
+const SM_ENTRY = {
+  ALT_FOLLOW:     'Default; no latch active, depth error within altitude_overshoot_threshold_m.',
+  OBSTACLE_HOLD:  'Cliff latch active; depth error < altitude_overshoot_threshold_m (1 m). vx = survey_speed, vertical_mode = DEPTH_HOLD at latched target.',
+  OBSTACLE_CLEAR: 'Cliff latch active; latched target > 1 m shallower than vehicle. vx = 0 until within 0.1 m of target, then survey_speed. vertical_mode = DEPTH_HOLD.',
+  ALT_CORRECTION: 'No latch; cmd_depth > altitude_overshoot_threshold_m (1 m) deeper than vehicle. vx = 0. vertical_mode = DEPTH_HOLD.',
+  TAIL_CLEAR:     'No latch; obstacle in tail safety band (behind vehicle body, within safety_below_m depth). vx = survey_speed, vertical_mode = DEPTH_HOLD at current depth.',
+};
+
+const SM_EDGES = [
+  { from: 'ALT_FOLLOW',     to: 'OBSTACLE_HOLD',  label: ['cliff latch,', '|dz| < 1 m'] },
+  { from: 'ALT_FOLLOW',     to: 'OBSTACLE_CLEAR', label: ['cliff latch,', 'dz > 1 m shallower'] },
+  { from: 'ALT_FOLLOW',     to: 'ALT_CORRECTION', label: ['cmd_depth', '> 1 m deeper'] },
+  { from: 'ALT_FOLLOW',     to: 'TAIL_CLEAR',      label: ['tail safety', 'band blocked'] },
+  { from: 'OBSTACLE_HOLD',  to: 'OBSTACLE_CLEAR', label: ['latch target', '> 1 m shallower'] },
+  { from: 'OBSTACLE_HOLD',  to: 'ALT_FOLLOW',      label: ['latch released'] },
+  { from: 'OBSTACLE_CLEAR', to: 'OBSTACLE_HOLD',  label: ['depth error', '< 1 m (latch active)'] },
+  { from: 'OBSTACLE_CLEAR', to: 'ALT_FOLLOW',      label: ['latch released'] },
+  { from: 'ALT_CORRECTION', to: 'ALT_FOLLOW',      label: ['error ≤ hysteresis'] },
+  { from: 'TAIL_CLEAR',     to: 'ALT_FOLLOW',      label: ['tail band clear'] },
+];
+
+function buildSMDiagram() {
+  const W = 660, H = 320;
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('width', W);
+  svg.setAttribute('height', H);
+
+  // Arrows (simplified)
+  const arrows = [
+    // ALT_FOLLOW → OBSTACLE_HOLD
+    { x1:260, y1:102, x2:200, y2:200, col:'#e06060', label:'obstacle detected' },
+    // ALT_FOLLOW → OBSTACLE_CLEAR
+    { x1:330, y1:124, x2:330, y2:200, col:'#ff4040', label:'large ascent needed' },
+    // ALT_FOLLOW → ALT_CORRECTION
+    { x1:370, y1:102, x2:460, y2:200, col:'#f0a04b', label:'large descent' },
+    // ALT_FOLLOW → TAIL_CLEAR
+    { x1:400, y1:90, x2:460, y2:90, col:'#6a9abb', label:'tail blocked' },
+    // OBSTACLE_HOLD → OBSTACLE_CLEAR
+    { x1:200, y1:215, x2:260, y2:215, col:'#ff4040', label:'error > thresh' },
+    // OBSTACLE_CLEAR → OBSTACLE_HOLD
+    { x1:260, y1:229, x2:200, y2:229, col:'#e06060', label:'depth ≈ target' },
+    // OBSTACLE_CLEAR → ALT_FOLLOW (latch released)
+    { x1:330, y1:244, x2:330, y2:300, col:'#4a7aee', label:'' },
+    // ALT_CORRECTION → ALT_FOLLOW
+    { x1:530, y1:244, x2:530, y2:300, col:'#4a7aee', label:'' },
+    // OBSTACLE_HOLD → ALT_FOLLOW (latch released)
+    { x1:130, y1:244, x2:130, y2:300, col:'#4a7aee', label:'latch released' },
+    // TAIL_CLEAR → ALT_FOLLOW
+    { x1:460, y1:100, x2:400, y2:100, col:'#4a7aee', label:'tail clear' },
+  ];
+
+  // Pass 1: arrow lines only
+  arrows.forEach(a => {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', a.x1); line.setAttribute('y1', a.y1);
+    line.setAttribute('x2', a.x2); line.setAttribute('y2', a.y2);
+    line.setAttribute('stroke', a.col); line.setAttribute('stroke-width', '1.5');
+    line.setAttribute('marker-end', `url(#sm-arr-${a.col.replace('#','').slice(0,6)})`);
+    svg.appendChild(line);
+  });
+
+  // Return path line
+  const retLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  retLine.setAttribute('d', 'M130,298 Q130,298 230,298 Q330,298 330,298');
+  retLine.setAttribute('stroke', '#3a4a6a'); retLine.setAttribute('stroke-width', '1');
+  retLine.setAttribute('fill', 'none'); retLine.setAttribute('stroke-dasharray', '3,3');
+  svg.appendChild(retLine);
+
+  // Pass 2: state boxes (render over arrow lines)
+  Object.entries(SM_DATA).forEach(([key, s]) => {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.classList.add('sm-state');
+    g.dataset.key = key;
+    g.setAttribute('onclick', `smClick('${key}')`);
+
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect.setAttribute('x', s.x); rect.setAttribute('y', s.y);
+    rect.setAttribute('width', s.w); rect.setAttribute('height', s.h);
+    rect.setAttribute('rx', '6');
+    rect.setAttribute('fill', s.col); rect.setAttribute('stroke', s.stroke);
+    rect.setAttribute('stroke-width', '1.5');
+
+    const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    text.setAttribute('x', s.x + s.w/2); text.setAttribute('y', s.y + s.h/2 + 4);
+    text.setAttribute('fill', '#d0d8f0'); text.setAttribute('font-size', '11');
+    text.setAttribute('font-weight', '600'); text.setAttribute('text-anchor', 'middle');
+    text.setAttribute('font-family', "'Cascadia Code', monospace");
+    text.textContent = s.label;
+
+    g.appendChild(rect); g.appendChild(text);
+    svg.appendChild(g);
+  });
+
+  // Pass 3: arrow labels on top of lines and state boxes
+  arrows.forEach(a => {
+    if (!a.label) return;
+    const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    t.setAttribute('x', (a.x1+a.x2)/2+4);
+    t.setAttribute('y', (a.y1+a.y2)/2-3);
+    t.setAttribute('fill', '#6a7a8a');
+    t.setAttribute('font-size', '9');
+    t.textContent = a.label;
+    svg.appendChild(t);
+  });
+  const retLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+  retLabel.setAttribute('x', '230'); retLabel.setAttribute('y', '314');
+  retLabel.setAttribute('fill', '#3a4a6a'); retLabel.setAttribute('font-size', '9');
+  retLabel.setAttribute('text-anchor', 'middle');
+  retLabel.textContent = '↑ ALT_FOLLOW (latch released)';
+  svg.appendChild(retLabel);
+
+  // Marker defs
+  const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+  ['e06060','ff4040','f0a04b','6a9abb','4a7aee'].forEach(c => {
+    const m = document.createElementNS('http://www.w3.org/2000/svg', 'marker');
+    m.setAttribute('id', `sm-arr-${c}`);
+    m.setAttribute('markerWidth','8'); m.setAttribute('markerHeight','8');
+    m.setAttribute('refX','6'); m.setAttribute('refY','3'); m.setAttribute('orient','auto');
+    const p = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    p.setAttribute('d', 'M0,0 L0,6 L8,3 Z'); p.setAttribute('fill', `#${c}`);
+    m.appendChild(p); defs.appendChild(m);
+  });
+  svg.insertBefore(defs, svg.firstChild);
+
+  document.getElementById('sm-diagram').appendChild(svg);
+}
+
+function buildLocalDiagram(focalKey) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const exits = SM_EDGES.filter(e => e.from === focalKey);
+  if (!exits.length) return null;
+
+  const BW = 128, BH = 34, BR = 5;
+  const FX = 8, EX = 304;
+  const RH = 58;
+  const W  = 444;
+  const H  = Math.max(exits.length * RH + 16, 80);
+  const FCY = H / 2;
+
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('width', W); svg.setAttribute('height', H);
+  svg.setAttribute('font-family', 'monospace');
+  svg.style.maxWidth = '100%'; svg.style.display = 'block'; svg.style.marginTop = '10px';
+
+  // arrowhead markers per destination color
+  const defs = document.createElementNS(ns, 'defs');
+  [...new Set(exits.map(e => SM_DATA[e.to].stroke.replace('#', '')))].forEach(c => {
+    const m = document.createElementNS(ns, 'marker');
+    m.setAttribute('id', `ld-${focalKey}-${c}`);
+    m.setAttribute('markerWidth', '7'); m.setAttribute('markerHeight', '7');
+    m.setAttribute('refX', '6'); m.setAttribute('refY', '3.5'); m.setAttribute('orient', 'auto');
+    const p = document.createElementNS(ns, 'path');
+    p.setAttribute('d', 'M0,0 L0,7 L7,3.5 Z'); p.setAttribute('fill', `#${c}`);
+    m.appendChild(p); defs.appendChild(m);
+  });
+  svg.appendChild(defs);
+
+  // pass 1: arrow paths only (behind everything)
+  const labelNodes = [];
+  exits.forEach((edge, i) => {
+    const rowCY = 8 + RH * i + RH / 2;
+    const x1 = FX + BW, y1 = FCY;
+    const x2 = EX,      y2 = rowCY;
+    const col = SM_DATA[edge.to].stroke;
+
+    const path = document.createElementNS(ns, 'path');
+    path.setAttribute('d', `M${x1},${y1} C${x1+50},${y1} ${x2-50},${y2} ${x2},${y2}`);
+    path.setAttribute('stroke', col); path.setAttribute('stroke-width', '1.5');
+    path.setAttribute('fill', 'none');
+    path.setAttribute('marker-end', `url(#ld-${focalKey}-${col.replace('#','')})`);
+    svg.appendChild(path);
+
+    // build label node but defer appending until pass 3
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+    const lines = Array.isArray(edge.label) ? edge.label : [edge.label];
+    const lbl = document.createElementNS(ns, 'text');
+    lbl.setAttribute('text-anchor', 'middle');
+    lbl.setAttribute('fill', '#68788e'); lbl.setAttribute('font-size', '9');
+    lines.forEach((ln, li) => {
+      const ts = document.createElementNS(ns, 'tspan');
+      ts.setAttribute('x', mx);
+      ts.setAttribute('y', my - (lines.length === 2 ? 7 : 2) + li * 11);
+      ts.textContent = ln;
+      lbl.appendChild(ts);
+    });
+    labelNodes.push(lbl);
+  });
+
+  // focal box
+  const fd = SM_DATA[focalKey];
+  const fr = document.createElementNS(ns, 'rect');
+  fr.setAttribute('x', FX); fr.setAttribute('y', FCY - BH/2);
+  fr.setAttribute('width', BW); fr.setAttribute('height', BH); fr.setAttribute('rx', BR);
+  fr.setAttribute('fill', fd.col); fr.setAttribute('stroke', fd.stroke); fr.setAttribute('stroke-width', '2');
+  svg.appendChild(fr);
+  const ft = document.createElementNS(ns, 'text');
+  ft.setAttribute('x', FX + BW/2); ft.setAttribute('y', FCY + 4);
+  ft.setAttribute('text-anchor', 'middle'); ft.setAttribute('fill', '#e8f0ff');
+  ft.setAttribute('font-size', '10'); ft.setAttribute('font-weight', 'bold');
+  ft.textContent = focalKey;
+  svg.appendChild(ft);
+
+  // pass 2: exit boxes (behind labels)
+  exits.forEach((edge, i) => {
+    const rowCY = 8 + RH * i + RH / 2;
+    const ed = SM_DATA[edge.to];
+    const er = document.createElementNS(ns, 'rect');
+    er.setAttribute('x', EX); er.setAttribute('y', rowCY - BH/2);
+    er.setAttribute('width', BW); er.setAttribute('height', BH); er.setAttribute('rx', BR);
+    er.setAttribute('fill', '#141e2a'); er.setAttribute('stroke', ed.stroke); er.setAttribute('stroke-width', '1');
+    svg.appendChild(er);
+    const et = document.createElementNS(ns, 'text');
+    et.setAttribute('x', EX + BW/2); et.setAttribute('y', rowCY + 4);
+    et.setAttribute('text-anchor', 'middle'); et.setAttribute('fill', ed.stroke);
+    et.setAttribute('font-size', '9');
+    et.textContent = edge.to;
+    svg.appendChild(et);
+  });
+
+  // pass 3: labels on top of everything
+  labelNodes.forEach(lbl => svg.appendChild(lbl));
+
+  return svg;
+}
+
+function smClick(key) {
+  const box = document.getElementById('sm-detail-box');
+  if (box.dataset.key === key && box.classList.contains('active')) {
+    box.classList.remove('active'); box.dataset.key = '';
+    return;
+  }
+  box.dataset.key = key;
+  box.classList.add('active');
+  const d = SM_DATA[key];
+  box.innerHTML = `<strong style="color:${d.stroke}">${key}</strong>
+<div class="sm-entry">${SM_ENTRY[key]}</div>`;
+  const diag = buildLocalDiagram(key);
+  if (diag) box.appendChild(diag);
+}
+
+// ─────────────────────────────────────────────
+// Video attach
+// ─────────────────────────────────────────────
+function uploadVideo(vidId, vpId) {
+  document.getElementById(vpId.replace('vp', 'file')).click();
+}
+
+function loadVideoFile(input, vidId, vpId) {
+  if (!input.files[0]) return;
+  const btn = document.querySelector(`#${vpId} .btn`);
+  const origLabel = btn.textContent;
+  btn.textContent = 'Encoding…';
+  btn.disabled = true;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const vid = document.getElementById(vidId);
+    vid.src = e.target.result;   // data URI — survives Save Page As
+    vid.style.display = 'block';
+    document.querySelector(`#${vpId} .vp-icon`).style.display = 'none';
+    document.querySelector(`#${vpId} .vp-title`).style.marginTop = '8px';
+    btn.textContent = origLabel;
+    btn.disabled = false;
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
+// ─────────────────────────────────────────────
+// Init
+// ─────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  buildSMDiagram();
+});
+</script>
+</body>
+</html>
