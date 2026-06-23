@@ -577,7 +577,7 @@
     </div>
     <div class="sensor-card">
       <h4>Fwd Sonar — <code>ISA500_FWD</code></h4>
-      <p>Fan of 7 rays spanning ±5° vertical half-angle, fired from the vehicle nose
+      <p>Fan of 7 rays spanning ±3° vertical half-angle (6° total cone), fired from the vehicle nose
         forward in the heading direction. Surface reflection filter: measurements are
         silently dropped when vehicle depth &lt; <code>sonar_min_depth_m</code> (1 m) to
         reject near-surface returns in shallow water.<br><br>
@@ -616,14 +616,14 @@
       <line x1="260" y1="155" x2="260" y2="250" stroke="#f0d060" stroke-width="2" stroke-dasharray="4,2"/>
       <text x="268" y="218" fill="#f0d060" font-size="10">Altimeter</text>
 
-      <!-- Forward sonar cone (±5° half-angle from nose) -->
-      <path d="M290,145 L549,122 L549,168 Z" fill="#7ecba1" fill-opacity="0.12" stroke="none"/>
-      <line x1="290" y1="145" x2="549" y2="122" stroke="#7ecba1" stroke-width="1.2" opacity="0.8"/>
-      <line x1="290" y1="145" x2="549" y2="168" stroke="#7ecba1" stroke-width="1.2" opacity="0.8"/>
+      <!-- Forward sonar cone (±3° half-angle, 6° total, from nose) -->
+      <path d="M290,145 L550,131 L550,159 Z" fill="#7ecba1" fill-opacity="0.12" stroke="none"/>
+      <line x1="290" y1="145" x2="550" y2="131" stroke="#7ecba1" stroke-width="1.2" opacity="0.8"/>
+      <line x1="290" y1="145" x2="550" y2="159" stroke="#7ecba1" stroke-width="1.2" opacity="0.8"/>
       <line x1="290" y1="145" x2="550" y2="145" stroke="#7ecba1" stroke-width="1.5"/>
-      <text x="338" y="133" fill="#6a9a80" font-size="9">5°</text>
-      <text x="338" y="162" fill="#6a9a80" font-size="9">5°</text>
-      <text x="556" y="150" fill="#7ecba1" font-size="10">Fwd Sonar (±5°)</text>
+      <text x="338" y="133" fill="#6a9a80" font-size="9">3°</text>
+      <text x="338" y="161" fill="#6a9a80" font-size="9">3°</text>
+      <text x="556" y="150" fill="#7ecba1" font-size="10">Fwd Sonar (±3°)</text>
 
       <!-- Labels & annotations -->
       <text x="30" y="55" fill="#6a9ab8" font-size="11">Forward (along heading) →</text>
@@ -884,7 +884,7 @@ acfr-lcm/config/
       <tr><td><code>dvl_max_range</code></td><td>25.0 m</td><td>DVL maximum valid range</td></tr>
       <tr><td><code>altimeter_max_range</code></td><td>25.0 m</td><td>Altimeter maximum valid range</td></tr>
       <tr><td><code>sonar_max_range</code></td><td>100.0 m</td><td>Fwd sonar maximum valid range</td></tr>
-      <tr><td><code>sonar_half_angle</code></td><td>5.0°</td><td>Forward sonar half beam angle</td></tr>
+      <tr><td><code>sonar_half_angle</code></td><td>3.0°</td><td>Forward sonar half beam angle (6° total cone)</td></tr>
 
       <tr><td colspan="3" style="background:#0e1520; color:#5a7090; font-size:.8rem; padding:6px 12px">Publish rate</td></tr>
       <tr><td><code>gridmap_decimation</code></td><td>5</td><td>Publish OA_GRIDMAP every Nth HEARTBEAT_5HZ tick (~1 Hz)</td></tr>
