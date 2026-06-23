@@ -918,46 +918,37 @@ acfr-lcm/config/
 
   <!-- VIDEO PLACEHOLDERS 1a–1c: logic simulator terrain profiles -->
   <div class="video-placeholder" id="vp1">
-    <div class="vp-icon">🎬</div>
     <div class="vp-title">Sawtooth terrain</div>
     <div class="vp-desc">
       Repeating cliff faces — exercises the full OBSTACLE_HOLD → OBSTACLE_CLEAR → OBSTACLE_HOLD
       → ALT_FOLLOW cycle and verifies the latch commits and releases correctly on each peak.
     </div>
-    <video id="vid1" controls></video>
-    <div style="margin-top:14px">
-      <button class="btn" onclick="uploadVideo('vid1','vp1')">Attach video file</button>
-      <input type="file" id="file1" accept="video/*" style="display:none" onchange="loadVideoFile(this,'vid1','vp1')">
-    </div>
+    <video controls style="display:block;width:100%;border-radius:6px;margin-top:12px">
+      <source src="./videos/oa-mapper-logic-sawtooth.mp4" type="video/mp4">
+    </video>
   </div>
 
   <div class="video-placeholder" id="vp2">
-    <div class="vp-icon">🎬</div>
     <div class="vp-title">Continuous slope</div>
     <div class="vp-desc">
       Gradually rising and falling terrain — confirms smooth altitude following
       (ALT_FOLLOW) and correct triggering of ALT_CORRECTION on descent without false
       obstacle latches.
     </div>
-    <video id="vid2" controls></video>
-    <div style="margin-top:14px">
-      <button class="btn" onclick="uploadVideo('vid2','vp2')">Attach video file</button>
-      <input type="file" id="file2" accept="video/*" style="display:none" onchange="loadVideoFile(this,'vid2','vp2')">
-    </div>
+    <video controls style="display:block;width:100%;border-radius:6px;margin-top:12px">
+      <source src="./videos/oa-mapper-logic-slope.mp4" type="video/mp4">
+    </video>
   </div>
 
   <div class="video-placeholder" id="vp3">
-    <div class="vp-icon">🎬</div>
     <div class="vp-title">Random terrain</div>
     <div class="vp-desc">
       Stochastic bathymetry with irregular peaks and troughs — stress-tests mode stability
       and stale-voxel clearing under varied heading changes and sensor update rates.
     </div>
-    <video id="vid3" controls></video>
-    <div style="margin-top:14px">
-      <button class="btn" onclick="uploadVideo('vid3','vp3')">Attach video file</button>
-      <input type="file" id="file3" accept="video/*" style="display:none" onchange="loadVideoFile(this,'vid3','vp3')">
-    </div>
+    <video controls style="display:block;width:100%;border-radius:6px;margin-top:12px">
+      <source src="./videos/oa-mapper-logic-random.mp4" type="video/mp4">
+    </video>
   </div>
 
   <h3>2. Vehicle SITL in Gazebo</h3>
@@ -971,17 +962,14 @@ acfr-lcm/config/
 
   <!-- VIDEO PLACEHOLDER 4: Gazebo SITL -->
   <div class="video-placeholder" id="vp4">
-    <div class="vp-icon">🎬</div>
     <div class="vp-title">Screen recording: AUV SITL in Gazebo with OA mapper active</div>
     <div class="vp-desc">
       Demonstrates the vehicle navigating terrain with obstacle avoidance active,
       showing the OA map visualizer alongside the Gazebo / RViz views.
     </div>
-    <video id="vid4" controls></video>
-    <div style="margin-top:14px">
-      <button class="btn" onclick="uploadVideo('vid4','vp4')">Attach video file</button>
-      <input type="file" id="file4" accept="video/*" style="display:none" onchange="loadVideoFile(this,'vid4','vp4')">
-    </div>
+    <video controls style="display:block;width:100%;border-radius:6px;margin-top:12px">
+      <source src="./videos/oa-mapper-gazebo.mp4" type="video/mp4">
+    </video>
   </div>
 
   <h3>3. Real vehicle LCM log replay</h3>
@@ -1000,17 +988,14 @@ acfr-lcm/config/
 
   <!-- VIDEO PLACEHOLDER 5: real vehicle log replay -->
   <div class="video-placeholder" id="vp5">
-    <div class="vp-icon">🎬</div>
     <div class="vp-title">Screen recording: real vehicle LCM log with OA mapper visualizer</div>
     <div class="vp-desc">
       Shows the occupancy grid and cmd_depth profile building up from real sensor data,
       with mode transitions overlaid in the visualizer.
     </div>
-    <video id="vid5" controls></video>
-    <div style="margin-top:14px">
-      <button class="btn" onclick="uploadVideo('vid5','vp5')">Attach video file</button>
-      <input type="file" id="file5" accept="video/*" style="display:none" onchange="loadVideoFile(this,'vid5','vp5')">
-    </div>
+    <video controls style="display:block;width:100%;border-radius:6px;margin-top:12px">
+      <source src="./videos/oa-mapper-lcm-log.mp4" type="video/mp4">
+    </video>
   </div>
 
   <h3>Useful debug tools</h3>
