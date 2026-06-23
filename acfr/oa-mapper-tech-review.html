@@ -556,7 +556,6 @@
 
   <div class="sensor-row">
     <div class="sensor-card">
-      <div class="sensor-icon">📡</div>
       <h4>DVL — <code>NUCLEUS.BOTTOMTRACK</code></h4>
       <p>3 beams at 20° slant angle, evenly spaced at 0° / 120° / 240° heading offsets.
         Only the forward-axis beam (0° offset) is axis-aligned; it alone clears voxels
@@ -567,7 +566,6 @@
       </p>
     </div>
     <div class="sensor-card">
-      <div class="sensor-icon">🔊</div>
       <h4>Altimeter — <code>NUCLEUS.ALTIMETER</code></h4>
       <p>Straight-down beam at vehicle X position. Ray-marches vertically through the
         depth column. Hit when range &lt; max_range − 0.05 m. Miss (full range) clears
@@ -578,7 +576,6 @@
       </p>
     </div>
     <div class="sensor-card">
-      <div class="sensor-icon">🔭</div>
       <h4>Fwd Sonar — <code>ISA500_FWD</code></h4>
       <p>Fan of 7 rays spanning ±5° vertical half-angle, fired from the vehicle nose
         forward in the heading direction. Surface reflection filter: measurements are
@@ -611,28 +608,22 @@
       <!-- Beam 0: forward-ish, 20° from vertical -->
       <line x1="260" y1="145" x2="295" y2="243" stroke="#4a9eff" stroke-width="1.5" stroke-dasharray="5,2"/>
       <text x="305" y="200" fill="#4a9eff" font-size="10">DVL B0 (0°)</text>
-      <!-- Beam 1: 120° offset (back-left in 3D, projected slightly back) -->
-      <line x1="245" y1="148" x2="215" y2="238" stroke="#5a7aee" stroke-width="1.5" stroke-dasharray="5,2"/>
-      <text x="155" y="218" fill="#5a7aee" font-size="10">DVL B1 (120°)</text>
-      <!-- Beam 2: 240° offset -->
-      <line x1="275" y1="148" x2="245" y2="238" stroke="#5a7aee" stroke-width="1.5" stroke-dasharray="5,2"/>
+      <!-- Beams 1 & 2: 120° / 240° offsets — shown as single projected beam -->
+      <line x1="260" y1="148" x2="228" y2="238" stroke="#5a7aee" stroke-width="1.5" stroke-dasharray="5,2"/>
+      <text x="142" y="212" fill="#5a7aee" font-size="10">DVL B1 &amp; B2</text>
 
       <!-- Altimeter -->
       <line x1="260" y1="155" x2="260" y2="250" stroke="#f0d060" stroke-width="2" stroke-dasharray="4,2"/>
       <text x="268" y="218" fill="#f0d060" font-size="10">Altimeter</text>
 
-      <!-- Forward sonar fan (7 rays from nose) -->
-      <!-- Nose at x=290 -->
-      <line x1="290" y1="145" x2="540" y2="240" stroke="#7ecba1" stroke-width="1.2" opacity="0.7"/>
-      <line x1="290" y1="145" x2="545" y2="210" stroke="#7ecba1" stroke-width="1.2" opacity="0.8"/>
-      <line x1="290" y1="145" x2="548" y2="155" stroke="#7ecba1" stroke-width="1.5"/>
-      <line x1="290" y1="145" x2="545" y2="100" stroke="#7ecba1" stroke-width="1.2" opacity="0.8"/>
-      <line x1="290" y1="145" x2="538" y2="75" stroke="#7ecba1" stroke-width="1.2" opacity="0.7"/>
-      <!-- Half-angle arcs -->
-      <path d="M320,145 A30,30 0 0,0 319,137" stroke="#7ecba1" stroke-width="1" fill="none" opacity="0.5"/>
-      <path d="M320,145 A30,30 0 0,1 319,153" stroke="#7ecba1" stroke-width="1" fill="none" opacity="0.5"/>
-      <text x="556" y="158" fill="#7ecba1" font-size="10">Fwd Sonar</text>
-      <text x="556" y="172" fill="#6a9a80" font-size="9">(7 rays, ±5°)</text>
+      <!-- Forward sonar cone (±5° half-angle from nose) -->
+      <path d="M290,145 L549,122 L549,168 Z" fill="#7ecba1" fill-opacity="0.12" stroke="none"/>
+      <line x1="290" y1="145" x2="549" y2="122" stroke="#7ecba1" stroke-width="1.2" opacity="0.8"/>
+      <line x1="290" y1="145" x2="549" y2="168" stroke="#7ecba1" stroke-width="1.2" opacity="0.8"/>
+      <line x1="290" y1="145" x2="550" y2="145" stroke="#7ecba1" stroke-width="1.5"/>
+      <text x="338" y="133" fill="#6a9a80" font-size="9">5°</text>
+      <text x="338" y="162" fill="#6a9a80" font-size="9">5°</text>
+      <text x="556" y="150" fill="#7ecba1" font-size="10">Fwd Sonar (±5°)</text>
 
       <!-- Labels & annotations -->
       <text x="30" y="55" fill="#6a9ab8" font-size="11">Forward (along heading) →</text>
@@ -652,7 +643,7 @@
       <circle cx="295" cy="243" r="5" fill="#c84030" opacity="0.8"/>
       <text x="302" y="247" fill="#e08070" font-size="9">hit: p += 0.5</text>
       <circle cx="260" cy="250" r="5" fill="#c84030" opacity="0.8"/>
-      <circle cx="548" cy="155" r="5" fill="#c84030" opacity="0.8"/>
+      <circle cx="550" cy="145" r="5" fill="#c84030" opacity="0.8"/>
     </svg>
   </div>
 
