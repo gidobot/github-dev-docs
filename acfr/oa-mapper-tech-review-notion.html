@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>OA Mapper — Technical Review</title>
+</head>
+<body>
+
+<h1>OA Mapper — Technical Review</h1>
+<p>Occupancy-Map Obstacle Avoidance · ACFR Seeker AUV · acfr-lcm</p>
+
+<h2>Overview</h2>
+
+<p>The OA Mapper is a probabilistic obstacle-avoidance system added to <code>acfr-lcm</code> for the ACFR Seeker AUV. It maintains a 2-D voxel occupancy grid anchored to the vehicle in the along-heading × depth plane, fuses observations from three onboard sensors, and produces a continuous vertical depth command that keeps the vehicle at a constant altitude above terrain while safely crossing cliffs and avoiding obstacles ahead.</p>
+
+<h3>Core components</h3>
+<ul>
+  <li><strong>Core library:</strong> <code>auv_oavoid::OccupancyMap</code> and <code>ObstacleMapper</code> in <code>src/acfr/oa-mapper/occupancy_map.*</code> — LCM-free C++ library containing all grid logic, sensor updates, and planning. No framework dependency.</li>
+  <li><strong>LCM node:</strong> <code>oa_mapper.cpp</code> wraps the core library: subscribes to sensor and nav LCM channels, calls the planning pipeline on every update, and publishes <code>OA_COMMAND</code> + <code>OA_GRIDMAP</code> at the configured rate.</li>
+  <li><strong>Web visualizer:</strong> <code>src/acfr/python/oa-map-visualizer.py</code> subscribes to <code>OA_GRIDMAP</code> and serves a live 3-panel view (top-down grid, depth profile, 3-D terrain) at <code>http://localhost:8050</code>.</li>
+</ul>
+
+<h2>Architecture</h2>
+
+<p>The OA mapper runs as a standalone process alongside the existing vehicle software stack. It is purely reactive — consuming sensor and nav LCM messages and publishing commands — with no shared memory or direct coupling to the planner.</p>
+
+<h3>System components and data flow</h3>
+<p><strong>Onboard sensors (publish to LCM bus):</strong></p>
+<ul>
+  <li>DVL → <code>&lt;Vehicle Name&gt;.NUCLEUS.BOTTOMTRACK</code></li>
+  <li>Altimeter → <code>&lt;Vehicle Name&gt;.NUCLEUS.ALTIMETER</code></li>
+  <li>Forward sonar → <code>&lt;Vehicle Name&gt;.ISA500_FWD</code></li>
+  <li>Navigation → <code>&lt;Vehicle Name&gt;.ACFR_NAV</code></li>
+  <li>Heartbeat → <code>HEARTBEAT_5HZ</code> (dashed — rate gate only)</li>
+</ul>
+<p><strong>oa-mapper (central process):</strong> Subscribes to all sensor and nav channels. Runs sensor updates → planning pipeline. Publishes <code>OA_COMMAND</code> at 5 Hz and <code>OA_GRIDMAP</code> at ~1 Hz. Source: <code>src/acfr/oa-mapper/</code>, config key <code>acfr.oa-mapper</code>.</p>
+<p><strong>Downstream consumers:</strong></p>
+<ul>
+  <li><code>local-planner</code> (local-planner-seeker-sitl) — receives <code>OA_COMMAND</code>; enabled via <code>use_oa_mapper = true</code>; passes vertical control to thruster-controller (minbus-control, vx/vz PID)</li>
+  <li><code>oa-map-visualizer.py</code> — receives <code>OA_GRIDMAP</code>; WebSocket + HTTP; <code>http://localhost:8050</code></li>
+</ul>
+
+<blockquote>The OA mapper integrates with the existing vehicle stack through a single config flag: <code>use_oa_mapper = true</code> in <code>local-planner-seeker-sitl</code>. When false, the mapper still runs and publishes but the planner ignores <code>OA_COMMAND</code> and uses its legacy altitude logic.</blockquote>
+
+<h2>Occupancy Grid</h2>
+
+<p>The grid is a 2-D probabilistic map in the vehicle's along-heading × depth frame. Cells store occupancy probability in [0, 1]. The prior is 0.5 (unknown). A cell is considered occupied when its probability exceeds <code>occ_thresh</code> (default 0.62).</p>
+
+<h3>Grid geometry (SITL defaults)</h3>
+<table>
+  <thead>
+    <tr><th>Parameter</th><th>Value</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>nx</code></td><td>60 columns (30 m × 0.5 m cell)</td></tr>
+    <tr><td><code>nz</code></td><td>160 rows (40 m × 0.25 m cell)</td></tr>
+    <tr><td><code>cx</code></td><td>30 — vehicle column index</td></tr>
+    <tr><td><code>horizon_fwd</code></td><td>15 m ahead of vehicle</td></tr>
+    <tr><td><code>horizon_back</code></td><td>15 m behind vehicle</td></tr>
+    <tr><td><code>z_half_range</code></td><td>±20 m depth window</td></tr>
+  </tbody>
+</table>
+
+<h3>Motion tracking</h3>
+<p>The grid scrolls with the vehicle. On each nav update:</p>
+<ul>
+  <li><code>advance(ds)</code> — shift columns left by <em>ds</em> m progress; new columns on the right initialise to prior 0.5</li>
+  <li><code>shift_depth(z)</code> — re-centre depth axis on vehicle depth; new rows initialise to prior 0.5</li>
+  <li>A teleport guard resets the grid if the jump exceeds the grid length</li>
+</ul>
+
+<h3>Stale-voxel clearing</h3>
+<p>Each occupied cell records the vehicle heading at the time it was observed (<code>voxel_heading_</code>). On every update tick, cells whose recorded heading differs from the current heading by more than <code>stale_heading_threshold_deg</code> (default 45°) are reset to the prior. This ensures that on a heading reversal (e.g. lawnmower turn), terrain seen from the opposite direction does not persist and generate ghost obstacles.</p>
+<p>Cells directly beneath the vehicle body (within ±vehicle_length/2 in the along-track direction from <code>cx</code>) are explicitly <strong>not</strong> cleared — their heading stamp is refreshed to the current heading on every tick. This preserves bottom terrain observations under the vehicle across turns, preventing the AUV from losing its altitude reference immediately after changing heading.</p>
+
+<h2>Sensor Models</h2>
+
+<p>All three sensors use the same probabilistic ray-marching approach: free cells along the ray path receive a miss decrement; the endpoint receives a hit increment or miss decrement depending on whether a surface was detected.</p>
+
+<h3>DVL — NUCLEUS.BOTTOMTRACK</h3>
+<p>3 beams at 20° slant angle, evenly spaced at 0° / 120° / 240° heading offsets. Only the forward-axis beam (0° offset) is axis-aligned; it alone clears voxels along its path. Lateral beams only mark their endpoint to avoid clearing voxels the 3-D beam never passed through in the projected 2-D plane. Also provides a direct altitude estimate from the minimum vertical component of surface-hitting beams.</p>
+
+<h3>Altimeter — NUCLEUS.ALTIMETER</h3>
+<p>Straight-down beam at vehicle X position. Ray-marches vertically through the depth column. Hit when range &lt; max_range − 0.05 m. Miss (full range) clears along the path and marks the endpoint as free. The altimeter altitude estimate is combined with the DVL estimate in <code>ObstacleMapper::get_altitude()</code> — the minimum of both valid readings is reported.</p>
+
+<h3>Fwd Sonar — ISA500_FWD</h3>
+<p>Fan of 7 rays spanning ±3° vertical half-angle (6° total cone), fired from the vehicle nose forward in the heading direction. Surface reflection filter: measurements are silently dropped when vehicle depth &lt; <code>sonar_min_depth_m</code> (1 m) to reject near-surface returns in shallow water. Updates grid cells at the nose position (not vehicle body centre), matching the physical sensor location.</p>
+
+<h3>Sensor beam geometry</h3>
+<p><em>[Diagram: vehicle body at centre (cx). Forward direction is to the right. Depth increases downward.]</em></p>
+<ul>
+  <li><strong>DVL B0 (0° heading offset):</strong> dashed blue line, 20° forward-slanting from vehicle to seafloor. Clears voxels along entire path. Endpoint marked as hit.</li>
+  <li><strong>DVL B1 &amp; B2 (120°/240° heading offsets):</strong> dashed indigo line, 20° rearward-slanting from vehicle to seafloor. Endpoint only — no path clearing in the 2-D projection.</li>
+  <li><strong>Altimeter:</strong> dashed yellow vertical line, straight down from vehicle. Ray-marches full depth column.</li>
+  <li><strong>Forward sonar:</strong> green filled triangle (±3° half-angle, 6° total cone) projecting ~260 m forward from vehicle nose. Centre-line at vehicle depth. Top and bottom cone edges labelled "3°". Hit probability applied at endpoint.</li>
+</ul>
+
+<h3>Observation model parameters</h3>
+<table>
+  <thead>
+    <tr><th>Sensor</th><th>hit_prob</th><th>miss_prob</th><th>max_occ</th><th>min_occ</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>DVL</td><td><code>0.50</code></td><td><code>0.30</code></td><td><code>0.98</code></td><td><code>0.02</code></td></tr>
+    <tr><td>Altimeter</td><td><code>0.50</code></td><td><code>0.30</code></td><td><code>0.98</code></td><td><code>0.02</code></td></tr>
+    <tr><td>Fwd Sonar</td><td><code>0.30</code></td><td><code>0.20</code></td><td><code>0.98</code></td><td><code>0.02</code></td></tr>
+  </tbody>
+</table>
+<p>The sonar uses lower probabilities because it is noisier (ISA500 single-beam range sonar vs. Nucleus acoustic Doppler). A hit still drives cells well above the 0.62 threshold after ~2 consecutive detections.</p>
+
+<h2>Planning Pipeline</h2>
+
+<p><code>OccupancyMap::update()</code> is called on every sensor callback and on every pose update. It runs four steps in sequence and returns the commanded depth at the vehicle column.</p>
+
+<h3>Step 1 — clear_stale_voxels(heading)</h3>
+<p>Reset cells observed from headings differing &gt;45° from current heading.</p>
+<p>Each occupied cell stores the vehicle heading at the time it was observed (<code>voxel_heading_</code>). Cells observed from a heading that now differs by more than <code>stale_heading_threshold_deg</code> (45°) are reset to the prior 0.5. Cells under the vehicle body (±vehicle_length/2 in x) are refreshed to the current heading first, so they are never stale even when turning.</p>
+
+<h3>Step 2 — build_cliff_manifold()</h3>
+<p>Extract the shallowest occupied voxel per column → manifold_z[].</p>
+<p>Pass 1: find the shallowest occupied cell (p &gt; occ_thresh) per column.</p>
+<p>Pass 2 (behind vehicle, columns 0…cx−1): use the observation if present; otherwise default to the grid bottom.</p>
+<p>Pass 3 (at and ahead of vehicle, columns cx…nx−1): use the observation if present; otherwise forward-extend the last seen manifold depth. This means the planner can already predict the needed altitude change before the vehicle reaches an observed cliff. Columns with no observation at all default to grid bottom.</p>
+
+<h3>Step 3 — build_commanded_depth(vehicle_depth)</h3>
+<p>Compute target depth per column: baseline altitude + obstacle latch + safety cap.</p>
+<p><strong>Step 3a — baseline:</strong> for each column, <code>cmd_depth = max(0, manifold_z − imaging_altitude)</code>. At the vehicle column, the DVL altitude estimate is also used to adjust cmd_depth upward (but never shallower than the manifold-based value).</p>
+<p><strong>Step 3b — cliff latch:</strong> if the forward-obstacle scan finds a rise within the cliff_standoff window, a latch commits to a single target depth equal to the peak minus imaging_altitude. The latch overrides all forward columns until the vehicle physically clears the obstacle.</p>
+<p><strong>Step 3c — safety tail cap:</strong> if terrain is in the safety_below_m band behind the vehicle, cap all forward cmd_depth values at the current vehicle depth (prevents descent into terrain behind the tail).</p>
+<p><strong>Step 3d — propagate:</strong> unobserved forward columns inherit the vehicle-column depth so the planner always has a sensible target even without forward sonar data.</p>
+
+<h3>Step 4 — build_path_waypoints()</h3>
+<p>Convert cmd_depth[] into a piecewise-linear waypoint list. Currently used for visualization only.</p>
+<p>Walks cmd_depth from cx to nx. When the depth changes by more than 2×dz between adjacent columns, a horizontal segment is emitted at the previous depth (to allow lateral clearance at the cliff edge) before a vertical segment at the new depth, producing a staircase-shaped (world_x, depth) polyline.</p>
+<p><strong>Note:</strong> the waypoints are computed and stored in <code>path_waypoints_</code> but are not currently published in <code>OA_COMMAND</code> or <code>OA_GRIDMAP</code> and are not consumed by the local planner. The planner acts solely on the scalar <code>vertical_mode</code> / <code>vertical_target</code> / <code>vx</code> fields in <code>OA_COMMAND</code>. The waypoint list is retained as a foundation for a future path-following interface.</p>
+
+<h3>Cliff-top latch</h3>
+<p>The latch is the core mechanism for handling forward cliffs. When the forward-obstacle scan detects a rise in the look-ahead window it commits to a target depth equal to the shallowest detected obstacle minus <code>imaging_altitude</code>. The latch persists until the vehicle has physically passed the obstacle peak plus a <code>cliff_standoff</code> + vehicle-length margin. This prevents premature altitude resumption before the tail has cleared the obstacle.</p>
+<p>An additional heading guard releases the latch early if the vehicle has turned &gt;45° from the heading at latch commit, which indicates the occupancy voxels disappeared due to a heading change (lawnmower turn), not because the obstacle was cleared.</p>
+
+<h3>Safety tail cap</h3>
+<p>Before finalising commanded depth, a separate scan checks the terrain band immediately behind the vehicle within <code>safety_standoff_m</code>. If terrain in this region falls within <code>safety_below_m</code> of the current vehicle depth, the commanded depth for all forward columns is capped at the current vehicle depth — preventing the planner from issuing a descent command that would drive the tail into terrain.</p>
+
+<h2>Control Modes</h2>
+
+<p>The mode is updated at the end of every planning cycle based on the current latch state and depth error.</p>
+
+<h3>State machine transitions</h3>
+<p><em>[Diagram: five states — ALT_FOLLOW (top centre), OBSTACLE_HOLD (bottom left), OBSTACLE_CLEAR (bottom centre), ALT_CORRECTION (bottom right), TAIL_CLEAR (top right). All non-ALT_FOLLOW states have return arrows to ALT_FOLLOW at bottom.]</em></p>
+
+<p><strong>Transitions out of ALT_FOLLOW:</strong></p>
+<ul>
+  <li>→ OBSTACLE_HOLD: cliff latch active, |dz| &lt; 1 m</li>
+  <li>→ OBSTACLE_CLEAR: cliff latch active, dz &gt; 1 m shallower</li>
+  <li>→ ALT_CORRECTION: cmd_depth &gt; 1 m deeper</li>
+  <li>→ TAIL_CLEAR: tail safety band blocked</li>
+</ul>
+<p><strong>Transitions out of OBSTACLE_HOLD:</strong></p>
+<ul>
+  <li>→ OBSTACLE_CLEAR: latch target &gt; 1 m shallower</li>
+  <li>→ ALT_FOLLOW: latch released (distance cleared OR heading change &gt;45°)</li>
+</ul>
+<p><strong>Transitions out of OBSTACLE_CLEAR:</strong></p>
+<ul>
+  <li>→ OBSTACLE_HOLD: depth error &lt; 1 m (latch still active, vehicle has ascended to target)</li>
+  <li>→ ALT_FOLLOW: latch released</li>
+</ul>
+<p><strong>Transitions out of ALT_CORRECTION:</strong></p>
+<ul>
+  <li>→ ALT_FOLLOW: error ≤ hysteresis</li>
+</ul>
+<p><strong>Transitions out of TAIL_CLEAR:</strong></p>
+<ul>
+  <li>→ ALT_FOLLOW: tail band clear</li>
+</ul>
+
+<h3>Mode descriptions</h3>
+
+<h4>ALT_FOLLOW</h4>
+<p>Default mode. No latch active, depth error within <code>altitude_overshoot_threshold_m</code> (1 m). Vehicle follows terrain at imaging altitude.</p>
+<ul>
+  <li>vertical_mode: <code>ALT_FOLLOW</code></li>
+  <li>vertical_target: <code>imaging_altitude</code> (2 m)</li>
+  <li>vx: <code>survey_speed</code> (0.5 m/s)</li>
+</ul>
+
+<h4>OBSTACLE_HOLD</h4>
+<p>Cliff latch active; depth error &lt; <code>altitude_overshoot_threshold_m</code> (1 m). Vehicle holds depth at the latched target while advancing forward at survey speed. The vehicle does not ascend in this mode — OBSTACLE_CLEAR is selected instead when the target is more than 1 m shallower than the vehicle.</p>
+<ul>
+  <li>vertical_mode: <code>DEPTH_HOLD</code></li>
+  <li>vertical_target: cmd_depth at vehicle column (latched target)</li>
+  <li>vx: <code>survey_speed</code></li>
+</ul>
+
+<h4>OBSTACLE_CLEAR</h4>
+<p>Cliff latch active; latched target &gt; 1 m shallower than vehicle. Vehicle must ascend to clear the obstacle. Forward motion is paused (vx = 0) until within 0.1 m of the target depth, then survey_speed resumes. The typical path is OBSTACLE_CLEAR → OBSTACLE_HOLD (as vehicle ascends to target, error drops below 1 m) → ALT_FOLLOW (when latch releases).</p>
+<ul>
+  <li>vertical_mode: <code>DEPTH_HOLD</code></li>
+  <li>vertical_target: cmd_depth at vehicle column (latched target)</li>
+  <li>vx: 0 m/s until within 0.1 m of target, then <code>survey_speed</code></li>
+</ul>
+
+<h4>ALT_CORRECTION</h4>
+<p>No latch active; cmd_depth &gt; <code>altitude_overshoot_threshold_m</code> (1 m) deeper than vehicle (altitude is too high, vehicle needs to descend). Forward motion is paused until depth is corrected.</p>
+<ul>
+  <li>vertical_mode: <code>DEPTH_HOLD</code></li>
+  <li>vertical_target: cmd_depth at vehicle column</li>
+  <li>vx: 0 m/s until depth reached</li>
+</ul>
+
+<h4>TAIL_CLEAR</h4>
+<p>No latch active; obstacle in tail safety band (behind vehicle body, within <code>safety_below_m</code> depth of vehicle). Vehicle holds current depth and continues at survey speed to move forward away from the terrain behind its tail.</p>
+<ul>
+  <li>vertical_mode: <code>DEPTH_HOLD</code></li>
+  <li>vertical_target: current vehicle depth</li>
+  <li>vx: <code>survey_speed</code></li>
+</ul>
+
+<h3>OA_COMMAND output by mode</h3>
+<table>
+  <thead>
+    <tr><th>Mode</th><th>vertical_mode</th><th>vertical_target</th><th>vx</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>ALT_FOLLOW</td><td><code>ALT_FOLLOW</code></td><td><code>imaging_altitude</code> (2 m)</td><td><code>survey_speed</code> (0.5 m/s)</td></tr>
+    <tr><td>OBSTACLE_HOLD</td><td><code>DEPTH_HOLD</code></td><td>cmd_depth at vehicle column</td><td><code>survey_speed</code></td></tr>
+    <tr><td>OBSTACLE_CLEAR</td><td><code>DEPTH_HOLD</code></td><td>cmd_depth at vehicle column</td><td>0 m/s until depth reached, then survey_speed</td></tr>
+    <tr><td>ALT_CORRECTION</td><td><code>DEPTH_HOLD</code></td><td>cmd_depth at vehicle column</td><td>0 m/s until depth reached</td></tr>
+    <tr><td>TAIL_CLEAR</td><td><code>DEPTH_HOLD</code></td><td>current vehicle depth</td><td><code>survey_speed</code></td></tr>
+  </tbody>
+</table>
+
+<blockquote>The local planner only acts on <code>OA_COMMAND</code> when <code>use_oa_mapper = true</code>. When false the mapper still runs and publishes but the planner uses its own legacy altitude logic. The OA_GRIDMAP channel is always published regardless.</blockquote>
+
+<h2>LCM Integration</h2>
+
+<p>The <code>oa-mapper</code> binary is the only process with LCM dependencies. The core library (<code>occupancy_map.*</code>) is framework-free and directly usable as a C++ library or Python extension.</p>
+
+<h3>Subscribed channels</h3>
+<table>
+  <thead>
+    <tr><th>Channel</th><th>Message type</th><th>Role</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>&lt;Vehicle Name&gt;.ACFR_NAV</code></td><td><code>auv_acfr_nav_t</code></td><td>Sole pose source (north, east, depth, heading). Updates grid position via <code>advance()</code> / <code>shift_depth()</code> on every message.</td></tr>
+    <tr><td><code>&lt;Vehicle Name&gt;.NUCLEUS.BOTTOMTRACK</code></td><td><code>nucleus_bottomtrack_t</code></td><td>DVL 3-beam bottom-track ranges + validity flags. Fixed 3-element array; <code>distance_beam_valid</code> + non-zero range determine hit. ~8 Hz.</td></tr>
+    <tr><td><code>&lt;Vehicle Name&gt;.NUCLEUS.ALTIMETER</code></td><td><code>nucleus_altimeter_t</code></td><td>Single altimeter range in metres. Hit if range &lt; max_range − 0.05 m. ~2 Hz.</td></tr>
+    <tr><td><code>&lt;Vehicle Name&gt;.ISA500_FWD</code></td><td><code>isa500_t</code></td><td>Forward sonar range in metres. Hit if range &lt; max_range − 0.1 m. ~1 Hz.</td></tr>
+    <tr><td><code>HEARTBEAT_5HZ</code></td><td><code>heartbeat_t</code></td><td>Rate gate for publishing. <code>OA_COMMAND</code> every tick (5 Hz); <code>OA_GRIDMAP</code> every <code>gridmap_decimation</code> ticks (~1 Hz by default).</td></tr>
+  </tbody>
+</table>
+
+<h3>Published channels</h3>
+<table>
+  <thead>
+    <tr><th>Channel</th><th>Message type</th><th>Contents</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>&lt;Vehicle Name&gt;.OA_COMMAND</code></td><td><code>auv_oa_command_t</code></td><td>vertical_mode, vertical_target, vx, altitude estimate, control_mode string. Published at 5 Hz.</td></tr>
+    <tr><td><code>&lt;Vehicle Name&gt;.OA_GRIDMAP</code></td><td><code>auv_oa_gridmap_t</code></td><td>Full grid serialised row-major as float32; manifold_z and cmd_depth vectors; vehicle pose; DVL altitude. Published at ~1 Hz.</td></tr>
+  </tbody>
+</table>
+
+<h3>Code structure</h3>
+<pre><code>acfr-lcm/src/acfr/oa-mapper/
+  ├── occupancy_map.hpp   // LCM-free core: OccupancyMap + ObstacleMapper
+  ├── occupancy_map.cpp
+  ├── oa_mapper.hpp       // LCM node: sensor callbacks + publish
+  └── oa_mapper.cpp
+
+acfr-lcm/src/acfr/python/
+  └── oa-map-visualizer.py  // WebSocket + HTTP viz, http://localhost:8050
+
+acfr-lcm/config/
+  └── seeker-sitl.cfg       // acfr.oa-mapper config block</code></pre>
+
+<h2>Configuration</h2>
+
+<p>All parameters are loaded from <code>acfr-lcm/config/seeker-sitl.cfg</code> under the <code>acfr.oa-mapper</code> key. Every key is optional; omitted keys fall back to the C++ struct defaults.</p>
+
+<table>
+  <thead>
+    <tr><th>Parameter</th><th>Default</th><th>Description</th></tr>
+  </thead>
+  <tbody>
+    <tr><td colspan="3"><strong>Grid geometry</strong></td></tr>
+    <tr><td><code>dx</code></td><td>0.5 m</td><td>Along-track cell width</td></tr>
+    <tr><td><code>dz</code></td><td>0.25 m</td><td>Depth cell height</td></tr>
+    <tr><td><code>horizon_fwd</code></td><td>15.0 m</td><td>Forward look-ahead extent</td></tr>
+    <tr><td><code>horizon_back</code></td><td>15.0 m</td><td>Rear history extent</td></tr>
+    <tr><td><code>z_half_range</code></td><td>20.0 m</td><td>Half the total depth window</td></tr>
+    <tr><td colspan="3"><strong>Vehicle / mission</strong></td></tr>
+    <tr><td><code>vehicle_length</code></td><td>2.0 m</td><td>Used for forward-obstacle and tail-clear geometry</td></tr>
+    <tr><td><code>imaging_altitude</code></td><td>2.0 m</td><td>Target altitude above terrain</td></tr>
+    <tr><td><code>survey_speed</code></td><td>0.5 m/s</td><td>Forward speed in ALT_FOLLOW / OBSTACLE_HOLD</td></tr>
+    <tr><td><code>vertical_speed</code></td><td>0.5 m/s</td><td>Max depth change rate in depth-hold</td></tr>
+    <tr><td colspan="3"><strong>Planning / safety</strong></td></tr>
+    <tr><td><code>cliff_standoff</code></td><td>2.0 m</td><td>Extra clearance past obstacle peak before releasing latch</td></tr>
+    <tr><td><code>obstacle_threshold</code></td><td>1.0 m</td><td>Minimum manifold rise to trigger forward-obstacle detection</td></tr>
+    <tr><td><code>altitude_overshoot_threshold_m</code></td><td>1.0 m</td><td>Depth error magnitude to enter OBSTACLE_CLEAR / ALT_CORRECTION</td></tr>
+    <tr><td><code>altitude_overshoot_hysteresis_m</code></td><td>0.5 m</td><td>Hysteresis band to prevent mode chatter</td></tr>
+    <tr><td><code>stale_heading_threshold_deg</code></td><td>45°</td><td>Heading change before voxels are cleared as stale</td></tr>
+    <tr><td><code>safety_standoff_m</code></td><td>2.0 m</td><td>Tail-clear scan reach behind vehicle</td></tr>
+    <tr><td><code>safety_below_m</code></td><td>1.0 m</td><td>Tail-clear depth tolerance band</td></tr>
+    <tr><td><code>occ_thresh</code></td><td>0.62</td><td>Occupancy probability threshold</td></tr>
+    <tr><td><code>sonar_min_depth_m</code></td><td>1.0 m</td><td>Minimum vehicle depth to use forward sonar</td></tr>
+    <tr><td colspan="3"><strong>Sensor ranges</strong></td></tr>
+    <tr><td><code>dvl_max_range</code></td><td>25.0 m</td><td>DVL maximum valid range</td></tr>
+    <tr><td><code>altimeter_max_range</code></td><td>25.0 m</td><td>Altimeter maximum valid range</td></tr>
+    <tr><td><code>sonar_max_range</code></td><td>100.0 m</td><td>Fwd sonar maximum valid range</td></tr>
+    <tr><td><code>sonar_half_angle</code></td><td>3.0°</td><td>Forward sonar half beam angle (6° total cone)</td></tr>
+    <tr><td colspan="3"><strong>Publish rate</strong></td></tr>
+    <tr><td><code>gridmap_decimation</code></td><td>5</td><td>Publish OA_GRIDMAP every Nth HEARTBEAT_5HZ tick (~1 Hz)</td></tr>
+  </tbody>
+</table>
+
+<h2>Testing</h2>
+
+<h3>1. Standalone logic simulator</h3>
+<p>Before vehicle integration the algorithm was validated in a standalone Python simulator that drives the same occupancy-map core against synthetic terrain profiles — sawtooth slopes, cliffs, random reef bathymetry — at configurable sensor rates. This confirms mode transitions and altitude-following behaviour independently of any hardware or middleware.</p>
+
+<h4>Sawtooth terrain</h4>
+<p><a href="https://gidobot.github.io/github-dev-docs/acfr/videos/oa-mapper-logic-sawtooth.mp4">Watch video: Sawtooth terrain</a></p>
+<p>Repeating cliff faces — exercises the full OBSTACLE_HOLD → OBSTACLE_CLEAR → OBSTACLE_HOLD → ALT_FOLLOW cycle and verifies the latch commits and releases correctly on each peak.</p>
+
+<h4>Continuous slope</h4>
+<p><a href="https://gidobot.github.io/github-dev-docs/acfr/videos/oa-mapper-logic-slope.mp4">Watch video: Continuous slope</a></p>
+<p>Gradually rising and falling terrain — confirms smooth altitude following (ALT_FOLLOW) and correct triggering of ALT_CORRECTION on descent without false obstacle latches.</p>
+
+<h4>Random terrain</h4>
+<p><a href="https://gidobot.github.io/github-dev-docs/acfr/videos/oa-mapper-logic-random.mp4">Watch video: Random terrain</a></p>
+<p>Stochastic bathymetry with irregular peaks and troughs — stress-tests mode stability and stale-voxel clearing under varied heading changes and sensor update rates.</p>
+
+<h3>2. Vehicle SITL in Gazebo</h3>
+<p>End-to-end integration test with the Seeker vehicle model in Gazebo. All three sensors (DVL, altimeter, forward sonar) feed live LCM messages into <code>oa-mapper</code> running inside the vehicle software container. The OA map visualizer at <code>http://localhost:8050</code> provides live 2-D top-down, depth profile, and 3-D terrain views during the mission.</p>
+
+<p><a href="https://gidobot.github.io/github-dev-docs/acfr/videos/oa-mapper-gazebo.mp4">Watch video: AUV SITL in Gazebo with OA mapper active</a></p>
+<p>Demonstrates the vehicle navigating terrain with obstacle avoidance active, showing the OA map visualizer alongside the Gazebo / RViz views.</p>
+
+<h3>3. Real vehicle LCM log replay</h3>
+<p>The mapper and visualizer can be driven from a recorded vehicle LCM log using <code>lcm-logplayer</code>, with no hardware or simulator required. This validates that the algorithm responds correctly to real sensor noise, dropout patterns, and navigation timing from an actual dive.</p>
+
+<blockquote><strong>Replay command:</strong> <code>lcm-logplayer --speed 1.0 &lt;logfile.lcm&gt;</code>. The mapper node and visualizer start normally; the log republishes all LCM channels at recorded timing. Set speed &lt; 1.0 to slow playback for detailed inspection.</blockquote>
+
+<blockquote><strong>Note:</strong> The log used here was recorded from a real dive where the vehicle was running the old altitude-following logic, not <code>oa-mapper</code>. The <code>oa-mapper</code> node was run offline against the log to demonstrate that the occupancy grid builds correctly and sensor data is processed as expected from real hardware — the <code>OA_COMMAND</code> output was not controlling the vehicle during this dive.</blockquote>
+
+<p><a href="https://gidobot.github.io/github-dev-docs/acfr/videos/oa-mapper-lcm-log.mp4">Watch video: Real vehicle LCM log with OA mapper visualizer</a></p>
+<p>Shows the occupancy grid and cmd_depth profile building up from real sensor data, confirming correct sensor ingestion and grid updates with live vehicle noise and timing.</p>
+
+<h3>Useful debug tools</h3>
+<table>
+  <thead>
+    <tr><th>Tool</th><th>Purpose</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>OccupancyMap::get_debug_summary()</code></td><td>C++ ASCII table of manifold_z and cmd_depth in a ±6-column window around cx; printed to stdout by oa-mapper on each heartbeat tick</td></tr>
+    <tr><td><code>OA_GRIDMAP</code> + visualizer</td><td>Live grid inspection, manifold overlay, and cmd_depth profile at http://localhost:8050</td></tr>
+    <tr><td><code>/snapshot</code> endpoint</td><td>Self-contained frozen Plotly 3-D terrain page at http://localhost:8050/snapshot for interactive camera exploration without live updates</td></tr>
+  </tbody>
+</table>
+
+</body>
+</html>
